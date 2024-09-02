@@ -4,4 +4,14 @@
     <h1>{{ app_data['description'] }}</h1>
     <h2>The trail</h2>
     <p class="lead">Welcome to our trail. <br> Find all the items listed below and scan their QR Code with your phone.</p>
+    <p>Items to find:</p>
+    {% if found %}
+        <p>You have found an item!</p>
+    {% endif %}
+    <ul>
+        {% for item in app_data['id_dict'] %}
+            <li>{{ app_data['id_dict'][item] }}</li>
+        {% endfor %}
+    </ul>
+
 {% endblock %}

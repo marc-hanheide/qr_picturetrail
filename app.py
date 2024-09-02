@@ -48,7 +48,7 @@ def trail():
     if id in app_data["id_dict"]:
         return render_template("trail.html", app_data=app_data, found=id)
     else:
-        return render_template("notfound.html", app_data=app_data, found=None)
+        return render_template("trail.html", app_data=app_data, found=None)
 
 
 
