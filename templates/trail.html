@@ -11,7 +11,7 @@
     <ul>
         {% for item in app_data['id_dict'] %}
             <li> 
-                {% if item in found_ids %}
+                {% if session["found_" + item] %}
                     FOUND ALREADY: 
                 {% endif %}
                 {{ app_data['id_dict'][item] }}
