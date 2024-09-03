@@ -35,6 +35,8 @@ def reset_session():
 
 
 def initialise_session():
+    session.permanent = True
+    app.permanent_session_lifetime = 3600
     for item in app_data["id_dict"]:
         found_id = 'found_'+item
         if found_id not in session:
