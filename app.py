@@ -41,9 +41,16 @@ def trail():
         initialise_session()
         found_id = 'found_'+id
         session[found_id] = True
-        return render_template("trail.html", app_data=app_data, found=id)
+        items_found = 0
+        for item in app_data["id_dict"]:
+            if session['found_' + item] == True:
+                items_found += 1
+        items_total=len(app_data["id_dict"])
+        print(items_found, items_total)
+                
+        return render_template("trail.html", app_data=app_data, found=id, items_found=items_found, items_total=items_total)
     else:
-        return render_template("trail.html", app_data=app_data, found=None)
+        return render_template("trail.html", app_data=app_data, found=None, items_found=items_found, items_total=items_total)
 
 
 
