@@ -10,3 +10,7 @@ A simple web app for a picture trail
 ## Run
 
 `python app.py`
+
+### NGrok
+
+To deploy publicly, use the ngrok command `ngrok1 -proto https -subdomain weltrail 5000` (only if you have your own ngrok server available and configured)

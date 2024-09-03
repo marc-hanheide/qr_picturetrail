@@ -7,7 +7,7 @@
     {% for item in app_data['id_dict'] %}
         <div class="row" >
             <h2>{{ app_data['id_dict'][item] }}</h2>
-            <a href="{{ app_data['base_url'] + "trail?id=" + item }}">{{ app_data['base_url'] + "trail?id=" + item }}</a>
+            <a href="{{ base_url + "trail?id=" + item }}">{{ base_url + "trail?id=" + item }}</a>
             <div class="col-md-6">
                 <a href="../static/{{ app_data['id_dict'][item] }}.png"><img src="../static/{{ app_data['id_dict'][item] }}.png" class="img-fluid" alt="{{ item }}" /></a>
             </div>

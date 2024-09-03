@@ -1,10 +1,9 @@
 app_data = {
-    "name": "QR Picture Trail",
-    "base_url": "http://127.0.0.1:5000/",
-    "description": "A basic Flask app using bootstrap to implement a QR-based picture trail.",
+    "name": "WEL QR Picture Trail",
+    "description": "Find all our light-themed pictures on the trail!",
     "author": "Marc Hanheide",
-    "html_title": "QR Picture Trail",
-    "project_name": "QR_PictureTrail",
+    "html_title": "WEL QR Picture Trail",
+    "project_name": "WEL Picture Trail",
     "keywords": "qr, trail, kids, flask, webapp",
     "id_dict": {
         "9509af0a-1764-4095-aa5c-20726b654146": "lighthouse",

@@ -7,7 +7,7 @@ https://github.com/petersimeth/basic-flask-template
 © MIT licensed, 2018-2023
 """
 
-from flask import Flask, render_template, request, send_file, session
+from flask import Flask, render_template, request, send_file, session, redirect
 from uuid import uuid4
 
 from config import app_data
@@ -20,13 +20,19 @@ app.secret_key = uuid4().bytes
 
 @app.route("/")
 def index():
-    session.pop('found_ids', default=[])
-    return render_template("index.html", app_data=app_data)
+    reset_session()
+    return redirect("/trail", code=302)
 
 
 @app.route("/about")
 def about():
     return render_template("about.html", app_data=app_data)
+
+def reset_session():
+    for item in app_data["id_dict"]:
+        found_id = 'found_'+item
+        session[found_id] = False
+
 
 def initialise_session():
     for item in app_data["id_dict"]:
@@ -37,22 +43,26 @@ def initialise_session():
 @app.route("/trail")
 def trail():
     id = request.args.get("id", default=0, type=str)
+    initialise_session()
     if id in app_data["id_dict"]:
-        initialise_session()
         found_id = 'found_'+id
         session[found_id] = True
-        items_found = 0
-        for item in app_data["id_dict"]:
-            if session['found_' + item] == True:
-                items_found += 1
-        items_total=len(app_data["id_dict"])
-        print(items_found, items_total)
+    items_found = 0
+    for item in app_data["id_dict"]:
+        if session['found_' + item] == True:
+            items_found += 1
+    items_total=len(app_data["id_dict"])
                 
-        return render_template("trail.html", app_data=app_data, found=id, items_found=items_found, items_total=items_total)
+    return render_template("trail.html", app_data=app_data, found=id, items_found=items_found, items_total=items_total)
+
+def get_protocol(req):
+    if req.headers.get('X-Forwarded-Proto') == 'https':
+        return 'https'
     else:
-        return render_template("trail.html", app_data=app_data, found=None, items_found=items_found, items_total=items_total)
+        return 'http'
 
-
+def get_base_url(req):
+    return get_protocol(req) + '://' + req.headers.get('Host') + '/'
 
 @app.route("/contact")
 def contact():
@@ -62,14 +72,14 @@ def contact():
 def qr(id):
     import qrcode, io
     image = io.BytesIO()
-    qrcode.make(app_data["base_url"] + "trail?id=" + id).save(image, "PNG")
+    qrcode.make(get_base_url(request) + "trail?id=" + id).save(image, "PNG")
     image.seek(0)
     return send_file(image, mimetype='image/png')
 
 
 @app.route("/qrs")
 def qrs():
-    return render_template("qrs.html", app_data=app_data)
+    return render_template("qrs.html", app_data=app_data, base_url=get_base_url(request))
 
 
 
