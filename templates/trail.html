@@ -6,11 +6,16 @@
     <p class="lead">Welcome to our trail. <br> Find all the items listed below and scan their QR Code with your phone.</p>
     <p>Items to find:</p>
     {% if found %}
-        <p>You have found an item!</p>
+        <p><b>You have found the {{ app_data['id_dict'][found] }}!</b></p>
     {% endif %}
     <ul>
         {% for item in app_data['id_dict'] %}
-            <li>{{ app_data['id_dict'][item] }}</li>
+            <li> 
+                {% if item in found_ids %}
+                    FOUND ALREADY: 
+                {% endif %}
+                {{ app_data['id_dict'][item] }}
+            </li>
         {% endfor %}
     </ul>
 

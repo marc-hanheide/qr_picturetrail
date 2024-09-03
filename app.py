@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 # -*- coding: utf-8 -*-
 """
 Peter Simeth's basic flask pretty youtube downloader (v1.3)
@@ -6,14 +7,17 @@ https://github.com/petersimeth/basic-flask-template
 © MIT licensed, 2018-2023
 """
 
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, send_file, session
+from uuid import uuid4
 
 DEVELOPMENT_ENV = True
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static", template_folder="templates")
+app.secret_key = uuid4().bytes
 
 app_data = {
     "name": "QR Picture Trail",
+    "base_url": "http://127.0.0.1:5000/",
     "description": "A basic Flask app using bootstrap to implement a QR-based picture trail.",
     "author": "Marc Hanheide",
     "html_title": "QR Picture Trail",
@@ -34,6 +38,7 @@ app_data = {
 
 @app.route("/")
 def index():
+    session.pop('found_ids', default=[])
     return render_template("index.html", app_data=app_data)
 
 
@@ -45,16 +50,37 @@ def about():
 @app.route("/trail")
 def trail():
     id = request.args.get("id", default=0, type=str)
+    if 'found_ids' not in session:
+        print('initialise')
+        session['found_ids'] = []
     if id in app_data["id_dict"]:
-        return render_template("trail.html", app_data=app_data, found=id)
+        print('add ' + id + " to found_ids, which previously was:" + str(session['found_ids']))
+        session['found_ids'].append(id)
+        print(session['found_ids'])
+        return render_template("trail.html", app_data=app_data, found=id, found_ids=session['found_ids'])
     else:
-        return render_template("trail.html", app_data=app_data, found=None)
+        return render_template("trail.html", app_data=app_data, found=None, found_ids=session['found_ids'])
 
 
 
 @app.route("/contact")
 def contact():
     return render_template("contact.html", app_data=app_data)
+
+@app.route("/qr/<id>")
+def qr(id):
+    import qrcode, io
+    image = io.BytesIO()
+    qrcode.make(app_data["base_url"] + "trail?id=" + id).save(image, "PNG")
+    image.seek(0)
+    return send_file(image, mimetype='image/png')
+
+
+@app.route("/qrs")
+def qrs():
+    return render_template("qrs.html", app_data=app_data)
+
+
 
 
 if __name__ == "__main__":
