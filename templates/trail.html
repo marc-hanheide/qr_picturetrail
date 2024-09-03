@@ -3,14 +3,14 @@
 {% block body %}
 <div class="mt-4 p-5 bg-primary text-white rounded">
     <h1>{{ app_data['description'] }}</h1>
-    <p class="lead">Welcome to the {{ app_data['project_name'] }} trail. <br> Find all the items listed below and scan their QR Code with your phone.</p>
+    <p class="lead">Welcome to the {{ app_data['project_name'] }} trail. <br> Find all the pictures listed below and scan their QR code with your phone.</p>
 </div>
 <hr>
 {% if found %}
 <div class="row">
         <div class="alert alert-success d-flex align-items-center alert-dismissible fade show" role="alert">
             <!--<svg class="bi flex-shrink-0 me-2" role="img" aria-label="Success:"><use xlink:href="#check-circle-fill"/></svg>-->
-            <strong>Hooray! You have found the {{ app_data['id_dict'][found] }}! Look below for other picture to search for.</strong>
+            <strong>Hooray! You have found the {{ app_data['id_dict'][found] }}! Look below for other pictures to search for.</strong>
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             
         </div>
