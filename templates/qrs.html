@@ -6,13 +6,15 @@
     <div class="container">
     {% for item in app_data['id_dict'] %}
         <div class="row" >
-            <h2>{{ app_data['id_dict'][item] }}</h2>
-            <a href="{{ base_url + "trail?id=" + item }}">{{ base_url + "trail?id=" + item }}</a>
+            <h2>{{ app_data['id_dict'][item]['title'] }}</h2>
+            <p>{{ app_data['id_dict'][item]['text'] }}</p>
             <div class="col-md-6">
-                <a href="../static/{{ app_data['id_dict'][item] }}.png"><img src="../static/{{ app_data['id_dict'][item] }}.png" class="img-fluid" alt="{{ item }}" /></a>
+                <a href="../static/{{ app_data['id_dict'][item]['image'] }}.jpg"><img src="../static/{{ app_data['id_dict'][item]['image'] }}.jpg" class="img-fluid" alt="{{ item }}" /></a>
             </div>
             <div class="col-md-6">
-                <a href="../qr/{{ item }}"><img src="../qr/{{ item }}" class="img-fluid" alt="{{ item }}" /></a>
+                <a href="{{ base_url + "trail?id=" + item }}">
+                    <img src="../qr/{{ item }}" class="img-fluid" alt="{{ item }}" />
+                </a>
             </div>
         </div>
     {% endfor %}

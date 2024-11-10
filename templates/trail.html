@@ -1,16 +1,18 @@
 {% extends 'layout.html' %}
 
 {% block body %}
-<div class="mt-4 p-5 bg-primary text-white rounded">
+<div class="mt-4 p-5 bg-primary link-white text-white rounded">
     <h1>{{ app_data['description'] }}</h1>
-    <p class="lead">Welcome to the {{ app_data['project_name'] }} trail. <br> Find all the pictures listed below and scan their QR code with your phone.</p>
+    <p class="lead">Welcome to the {{ app_data['project_name'] }} trail. <br> Find all the posters listed below and scan their QR code with your phone.</p>
+    <p><strong>
+        Explore Lincoln West End Lights on <a style="color:coral" href="https://www.lincoln-west-end-lights.com/illuminations-2024/" target="_blank">our map</a>.
+    </strong></p>
 </div>
-<hr>
 {% if found %}
 <div class="row">
         <div class="alert alert-success d-flex align-items-center alert-dismissible fade show" role="alert">
             <!--<svg class="bi flex-shrink-0 me-2" role="img" aria-label="Success:"><use xlink:href="#check-circle-fill"/></svg>-->
-            <strong>Hooray! You have found the {{ app_data['id_dict'][found] }}! Look below for other pictures to search for.</strong>
+            <strong>Hooray! You have found the {{ app_data['id_dict'][found]['title'] }}! Look below for other pictures to search for.</strong>
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             
         </div>
@@ -18,22 +20,30 @@
 {% endif %}
 
 <div class="row">
-    <h2>Items to find</h2>
     {% if items_found == items_total %}
+    <h2>You completed the WEL Trail!</h2>
         <div class="alert alert-success d-flex align-items-center alert-dismissible fade show" role="alert">
             <!--<svg class="bi flex-shrink-0 me-2" role="img" aria-label="Success:"><use xlink:href="#check-circle-fill"/></svg>-->
-            <strong>Congratulations! You have found all the items! <a href="/">Click here to start over.</a></strong>
+            <strong>
+                Congratulations! You have found all the items! 
+                Here is your certificate (click it to download): <br>
+                <a href="../static/certificate.pdf" target="_blank">
+                    <img style="width: 100%;" src="../static/certificate.png" class="img-fluid rounded" alt="certificate" />
+                </a>
+                <a href="/">Click here to start over.</a>
+            </strong>
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     {% else %}
+        <h2>Items to find</h2>
         <strong>You have already found {{ items_found }} out of {{ items_total }} items.</strong>
         <div class="progress">
-            <div class="progress-bar" role="progressbar" style="width: {{ 100.0 * items_found / items_total }}%;" aria-valuenow="{{ 100.0 * items_found / items_total }}" aria-valuemin="0" aria-valuemax="100">{{ 100.0 * items_found / items_total }}%</div>
+            <div class="progress-bar" role="progressbar" style="width: {{ 100 * items_found / items_total }}%;" aria-valuenow="{{ 100.0 * items_found / items_total }}" aria-valuemin="0" aria-valuemax="100">{{ (100 * items_found // items_total) }}%</div>
         </div>
         <p>Find the remaining {{ items_total - items_found }} items listed below in red and scan their QR Code with your phone.</p> 
 
     {% endif %}
-    <table class="table table-bordered" style="vertical-align: middle; ">
+    <table class="table table-bordered table-hover" style="vertical-align: middle; ">
         <thead>
             <tr>
                 <th>Found it yet?</th>
@@ -56,9 +66,11 @@
                         <b>Nope! Go, find it and scan its QR Code!</b>
                     {% endif %}
                 </td>
-                <td>
+                <td style="text-align: center;">
                     <!-- <h4>{{ app_data['id_dict'][item] }}</h4> -->
-                    <img style="width: 50%;" src="../static/{{ app_data['id_dict'][item] }}.png" class="img-fluid rounded float-right" alt="{{ item }}" />
+                    <h4>{{ app_data['id_dict'][item]['title'] }}</h4>
+                    <img style="width: 50%;" src="../static/{{ app_data['id_dict'][item]['image'] }}.jpg" class="img-fluid rounded float-right" alt="{{ item }}" />
+                    
                 </td>
             </tr>
         {% endfor %}

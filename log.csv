@@ -1,0 +1,6 @@
+id,session,found,ip,user_agent,referrer,timestamp
+ce888ab1-ac19-40da-9b98-ebd65742d050,a243d7e2f50e42cea93566f90bae93b4,1,31.94.28.251,"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",https://weltrail.zrok.lcas.group/qrs,2024-11-10T17:38:05.906110
+18c5588a-11ce-4c74-88fd-1bbcf153f08f,a243d7e2f50e42cea93566f90bae93b4,2,31.94.28.251,"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",https://weltrail.zrok.lcas.group/qrs,2024-11-10T17:38:13.221341
+d4b77f9b-446e-4898-982c-ca05109b2b3f,a243d7e2f50e42cea93566f90bae93b4,3,31.94.28.251,"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",https://weltrail.zrok.lcas.group/qrs,2024-11-10T17:38:13.936308
+18c5588a-11ce-4c74-88fd-1bbcf153f08f,4e3a8da6e2044f1a823a165e4be96206,1,31.94.28.251,"Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",,2024-11-10T17:38:49.415551
+d4b77f9b-446e-4898-982c-ca05109b2b3f,4e3a8da6e2044f1a823a165e4be96206,2,31.94.28.251,"Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",,2024-11-10T17:39:02.738841
