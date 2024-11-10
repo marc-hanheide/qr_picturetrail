@@ -26,10 +26,10 @@ LOG_FILE='log.csv'
 
 if path.exists('log.csv'):
     csv_file = open('log.csv', 'a')
-    logwriter = DictWriter(csv_file, fieldnames=["id", "session", "found", "ip", "user_agent", "referrer", "timestamp"])
+    logwriter = DictWriter(csv_file, fieldnames=["id", "item", "session", "found", "ip", "user_agent", "referrer", "timestamp"])
 else:
     csv_file = open('log.csv', 'w')
-    logwriter = DictWriter(csv_file, fieldnames=["id", "session", "found", "ip", "user_agent", "referrer", "timestamp"])
+    logwriter = DictWriter(csv_file, fieldnames=["id", "item", "session", "found", "ip", "user_agent", "referrer", "timestamp"])
     logwriter.writeheader()
 
 csv_file.flush()
@@ -62,7 +62,7 @@ def initialise_session():
 
 @app.route("/trail")
 def trail():
-    id = request.args.get("id", default=0, type=str)
+    id = request.args.get("id", default='', type=str)
     initialise_session()
     if id in app_data["id_dict"]:
         found_id = 'found_'+id
@@ -72,20 +72,22 @@ def trail():
         if session['found_' + item] == True:
             items_found += 1
     items_total=len(app_data["id_dict"])
-    try:
-        logwriter.writerow({
-            "id": id,
-            "session": session['id'],
-            "found": items_found,
-            "ip": request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0],
-            "user_agent": request.user_agent.string,
-            "referrer": request.referrer,
-            "timestamp": datetime.now().isoformat()
-        })
-        csv_file.flush()
-    except Exception as e:
-        print("Could not write to log file %s" % e)
-        #pass
+    if id in app_data["id_dict"]:
+        try:
+            logwriter.writerow({
+                "id": id,
+                "item": app_data["id_dict"][id]['image'],
+                "session": session['id'],
+                "found": items_found,
+                "ip": request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0],
+                "user_agent": request.user_agent.string,
+                "referrer": request.referrer,
+                "timestamp": datetime.now().isoformat()
+            })
+            csv_file.flush()
+        except Exception as e:
+            print("Could not write to log file %s" % e)
+            #pass
     return render_template("trail.html", app_data=app_data, found=id, items_found=items_found, items_total=items_total)
 
 def get_protocol(req):
@@ -108,6 +110,10 @@ def qr(id):
     qrcode.make(get_base_url(request) + "trail?id=" + id).save(image, "PNG")
     image.seek(0)
     return send_file(image, mimetype='image/png')
+
+@app.route("/log")
+def log():
+    return send_file(LOG_FILE, mimetype='text/csv')
 
 
 @app.route("/qrs")
