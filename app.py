@@ -122,4 +122,4 @@ def qrs():
 
 
 if __name__ == "__main__":
-    app.run(debug=DEVELOPMENT_ENV, port=5999)
+    app.run(debug=DEVELOPMENT_ENV, port=5999, host='0.0.0.0')

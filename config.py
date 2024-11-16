@@ -16,7 +16,7 @@ app_data = {
             "image": "fire",
             "title": "Fire",
             "text": "When things burn, they make light and heat. A campfire is made of wood burning, and the flames give us light to see in the dark and keep us cosy!",
-            "hint": "Where would you find a cosy fire to have a drink at in the West End?"
+            "hint": "Where Ashlin meets Richmond."
         },
         "6e9ffaa0-688a-4a9e-8126-2d9c34596733": {
             "image": "lightbulb",

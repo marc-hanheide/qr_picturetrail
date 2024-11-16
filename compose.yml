@@ -1,0 +1,23 @@
+services:
+  qrtrail:
+    restart: unless-stopped
+    image: lcas.lincoln.ac.uk/mhanheide/qrtrail:latest
+    build: 
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - .:/app
+    ports:
+      - "5999:5999"
+
+  zrok:
+      image: openziti/zrok
+      restart: unless-stopped
+      user: "1001"
+      volumes:
+        - ${HOME}/.zrok:/.zrok
+      environment:
+          PFXLOG_NO_JSON: "true"
+      command: share reserved "weltrail" --headless
+      links:
+        - qrtrail
