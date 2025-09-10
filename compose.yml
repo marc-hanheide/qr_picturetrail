@@ -1,7 +1,7 @@
 services:
   qrtrail:
     restart: unless-stopped
-    image: lcas.lincoln.ac.uk/mhanheide/qrtrail:latest
+    image: lcas.lincoln.ac.uk/mhanheide/qrtrail:sfytrail
     build: 
       context: .
       dockerfile: .devcontainer/Dockerfile
