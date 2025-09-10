@@ -23,6 +23,13 @@ DEVELOPMENT_ENV = True
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = uuid4().bytes
 
+# Add custom filter to check if file exists
+@app.template_filter('file_exists')
+def file_exists(filepath):
+    """Check if a file exists in the static folder"""
+    full_path = path.join(app.static_folder, filepath)
+    return path.exists(full_path)
+
 # Configure upload settings
 app.config['UPLOAD_FOLDER'] = app_data['upload_folder']
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size

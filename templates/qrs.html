@@ -8,6 +8,8 @@
         <div class="row" >
             <h2>{{ app_data['id_dict'][item]['title'] }}</h2>
             <p>{{ app_data['id_dict'][item]['text'] }}</p>
+            {% set image_filename = app_data['id_dict'][item]['image'] + ".jpg" %}
+            {% if image_filename|file_exists %}
             <div class="col-md-6">
                 <a href="../static/{{ app_data['id_dict'][item]['image'] }}.jpg"><img src="../static/{{ app_data['id_dict'][item]['image'] }}.jpg" class="img-fluid" alt="{{ item }}" /></a>
             </div>
@@ -16,6 +18,13 @@
                     <img src="../qr/{{ item }}" class="img-fluid" alt="{{ item }}" />
                 </a>
             </div>
+            {% else %}
+            <div class="col-md-12">
+                <a href="{{ base_url + "trail?id=" + item }}">
+                    <img src="../qr/{{ item }}" class="img-fluid" alt="{{ item }}" />
+                </a>
+            </div>
+            {% endif %}
         </div>
     {% endfor %}
     </div>

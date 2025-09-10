@@ -15,10 +15,7 @@
 
 <div class="mt-4 p-5 bg-primary text-white rounded">
     <h1>{{ app_data['name'] }}</h1>
-    <p class="lead">Welcome to our little interactive trail. Find all the {{ items_total }} posters spread around the West End listed below and scan their QR code with your phone. Use the hints for each poster below to get an idea where you may find it.</p>
-    <p><strong>
-        Explore Lincoln West End Lights on <a style="color:rgb(137, 255, 86)" href="https://www.lincoln-west-end-lights.com/illuminations-2024/" target="_blank">our map</a>.
-    </strong></p>
+    <p class="lead">Welcome to our little interactive trail. Find all the {{ items_total }} locations.</p>
 </div>
 
 <!-- Flash messages for photo upload feedback -->
@@ -47,7 +44,7 @@
                 <h5>📸 Share Your Discovery!</h5>
             </div>
             <div class="card-body">
-                <p>Would you like to take a photo of yourself with the {{ app_data['id_dict'][found]['title'] }} poster?</p>
+                <p>{{ app_data['id_dict'][found]['text'] }}</p>
                 
                 <!-- Camera buttons -->
                 <div class="mb-3" id="buttonContainer">
@@ -119,7 +116,7 @@
         <div class="alert alert-success d-flex align-items-center alert-dismissible fade show" role="alert">
             <!--<svg class="bi flex-shrink-0 me-2" role="img" aria-label="Success:"><use xlink:href="#check-circle-fill"/></svg>-->
             <strong>
-                Congratulations! You have found all the posters! 
+                Congratulations! You have found all the locations! 
                 Here is your certificate (click it to download): <br>
                 <a href="../static/certificate.pdf" target="_blank">
                     <img style="width: 100%;" src="../static/certificate.png" class="img-fluid rounded" alt="certificate" />
@@ -129,18 +126,18 @@
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     {% else %}
-        <h2>Posters to find</h2>
-        <strong>You have already found {{ items_found }} out of {{ items_total }} posters.</strong>
+        <h2>Locations to find</h2>
+        <strong>You have already found {{ items_found }} out of {{ items_total }} locations.</strong>
         <div class="progress">
             <div class="progress-bar" role="progressbar" style="width: {{ 100 * items_found / items_total }}%;" aria-valuenow="{{ 100.0 * items_found / items_total }}" aria-valuemin="0" aria-valuemax="100">{{ (100 * items_found // items_total) }}%</div>
         </div>
-        <p>Find the remaining {{ items_total - items_found }} posters listed below in red and scan their QR Code with your phone.</p> 
+        <p>Find the remaining {{ items_total - items_found }} locations listed below in red and scan their QR Code with your phone.</p> 
 
     {% endif %}
     <table class="table table-bordered table-hover" style="vertical-align: middle; ">
         <thead>
             <tr>
-                <th style="text-align: center;">Poster</th>
+                <th style="text-align: center;">Location</th>
                 <th style="text-align: center;">Found it yet?</th>
             </tr>
         </thead>
@@ -155,7 +152,10 @@
                         <!-- <h4>{{ app_data['id_dict'][item] }}</h4> -->
                         <h4>{{ app_data['id_dict'][item]['title'] }}</h4>
                         <p><strong>Hint where you can find me: </strong><br>{{ app_data['id_dict'][item]['hint']|safe }}</p>
+                        {% set image_filename = app_data['id_dict'][item]['image'] + ".jpg" %}
+                        {% if image_filename|file_exists %}
                         <img style="width: 50%;" src="../static/{{ app_data['id_dict'][item]['image'] }}.jpg" class="img-fluid rounded float-right" alt="{{ item }}" />
+                        {% endif %}
                         
                     </td>
                     <td>
