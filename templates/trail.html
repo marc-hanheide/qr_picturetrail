@@ -48,16 +48,65 @@
             </div>
             <div class="card-body">
                 <p>Would you like to take a photo of yourself with the {{ app_data['id_dict'][found]['title'] }} poster?</p>
-                <form method="POST" enctype="multipart/form-data" id="photoForm">
+                
+                <!-- Camera buttons -->
+                <div class="mb-3" id="buttonContainer">
+                    <button type="button" class="btn btn-success me-2" id="openCameraBtn">
+                        <i class="bi bi-camera"></i> Open Camera
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="chooseFileBtn">
+                        <i class="bi bi-folder"></i> Choose from Gallery
+                    </button>
+                </div>
+                
+                <!-- Camera video element (hidden initially) -->
+                <div id="cameraContainer" style="display: none;" class="mb-3">
+                    <video id="camera" width="100%" height="300" autoplay playsinline style="border-radius: 8px;"></video>
+                    <canvas id="canvas" style="display: none;"></canvas>
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-primary" id="captureBtn">
+                            <i class="bi bi-camera-fill"></i> Capture Photo
+                        </button>
+                        <button type="button" class="btn btn-secondary" id="closeCameraBtn">
+                            <i class="bi bi-x"></i> Close Camera
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Preview area -->
+                <div id="previewContainer" style="display: none;" class="mb-3">
+                    <h6>Preview:</h6>
+                    <img id="preview" src="" alt="Preview" class="img-fluid" style="max-height: 300px; border-radius: 8px;">
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-success" id="confirmUploadBtn">
+                            <i class="bi bi-upload"></i> Upload This Photo
+                        </button>
+                        <button type="button" class="btn btn-secondary" id="retakeBtn">
+                            <i class="bi bi-arrow-clockwise"></i> Retake
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Traditional file upload form -->
+                <form method="POST" enctype="multipart/form-data" id="photoForm" style="display: none;">
                     <input type="hidden" name="item_id" value="{{ found }}">
                     <div class="mb-3">
                         <label for="photo" class="form-label">Choose a photo:</label>
-                        <input type="file" class="form-control" id="photo" name="photo" accept="image/*" capture="environment">
-                        <div class="form-text">You can take a new photo or choose one from your gallery.</div>
+                        <input type="file" class="form-control" id="photo" name="photo" accept="image/*">
+                        <div class="form-text">Select a photo from your device.</div>
                     </div>
                     <button type="submit" class="btn btn-primary" id="uploadBtn" disabled>
                         <i class="bi bi-upload"></i> Upload Photo
                     </button>
+                    <button type="button" class="btn btn-secondary" id="cancelFileBtn">
+                        Cancel
+                    </button>
+                </form>
+                
+                <!-- Hidden form for camera uploads -->
+                <form method="POST" enctype="multipart/form-data" id="cameraForm" style="display: none;">
+                    <input type="hidden" name="item_id" value="{{ found }}">
+                    <input type="file" id="cameraPhoto" name="photo" style="display: none;">
                 </form>
             </div>
         </div>
@@ -128,15 +177,167 @@
 </div>
 
 <script>
-// Enable upload button when file is selected
-document.getElementById('photo').addEventListener('change', function() {
-    const uploadBtn = document.getElementById('uploadBtn');
-    if (this.files && this.files.length > 0) {
-        uploadBtn.disabled = false;
-    } else {
+let stream = null;
+let capturedImageBlob = null;
+
+// Elements
+const openCameraBtn = document.getElementById('openCameraBtn');
+const chooseFileBtn = document.getElementById('chooseFileBtn');
+const cameraContainer = document.getElementById('cameraContainer');
+const camera = document.getElementById('camera');
+const canvas = document.getElementById('canvas');
+const captureBtn = document.getElementById('captureBtn');
+const closeCameraBtn = document.getElementById('closeCameraBtn');
+const previewContainer = document.getElementById('previewContainer');
+const preview = document.getElementById('preview');
+const confirmUploadBtn = document.getElementById('confirmUploadBtn');
+const retakeBtn = document.getElementById('retakeBtn');
+const photoForm = document.getElementById('photoForm');
+const cameraForm = document.getElementById('cameraForm');
+const photo = document.getElementById('photo');
+const uploadBtn = document.getElementById('uploadBtn');
+const cancelFileBtn = document.getElementById('cancelFileBtn');
+const buttonContainer = document.getElementById('buttonContainer');
+
+// Open camera
+if (openCameraBtn) {
+    openCameraBtn.addEventListener('click', async function() {
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    facingMode: 'environment', // Use back camera by default
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                } 
+            });
+            camera.srcObject = stream;
+            cameraContainer.style.display = 'block';
+            buttonContainer.style.display = 'none';
+        } catch (err) {
+            console.error('Error accessing camera:', err);
+            alert('Could not access camera. Please check permissions or use the file upload option.');
+        }
+    });
+}
+
+// Capture photo
+if (captureBtn) {
+    captureBtn.addEventListener('click', function() {
+        const context = canvas.getContext('2d');
+        canvas.width = camera.videoWidth;
+        canvas.height = camera.videoHeight;
+        context.drawImage(camera, 0, 0);
+        
+        // Convert canvas to blob
+        canvas.toBlob(function(blob) {
+            capturedImageBlob = blob;
+            const url = URL.createObjectURL(blob);
+            preview.src = url;
+            
+            // Hide camera, show preview
+            cameraContainer.style.display = 'none';
+            previewContainer.style.display = 'block';
+            
+            // Stop camera stream
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+        }, 'image/jpeg', 0.8);
+    });
+}
+
+// Close camera
+if (closeCameraBtn) {
+    closeCameraBtn.addEventListener('click', function() {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            stream = null;
+        }
+        cameraContainer.style.display = 'none';
+        buttonContainer.style.display = 'block';
+    });
+}
+
+// Confirm upload (camera photo)
+if (confirmUploadBtn) {
+    confirmUploadBtn.addEventListener('click', function() {
+        if (capturedImageBlob) {
+            // Create a File object from the blob
+            const file = new File([capturedImageBlob], 'camera_photo.jpg', { type: 'image/jpeg' });
+            
+            // Create FormData and append the file
+            const formData = new FormData();
+            formData.append('photo', file);
+            formData.append('item_id', document.querySelector('input[name="item_id"]').value);
+            
+            // Show loading state
+            confirmUploadBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Uploading...';
+            confirmUploadBtn.disabled = true;
+            
+            // Send the form data
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.ok) {
+                    // Reload the page to show success message
+                    window.location.reload();
+                } else {
+                    throw new Error('Upload failed');
+                }
+            })
+            .catch(error => {
+                console.error('Error uploading photo:', error);
+                alert('Failed to upload photo. Please try again.');
+                confirmUploadBtn.innerHTML = '<i class="bi bi-upload"></i> Upload This Photo';
+                confirmUploadBtn.disabled = false;
+            });
+        }
+    });
+}
+
+// Retake photo
+if (retakeBtn) {
+    retakeBtn.addEventListener('click', function() {
+        previewContainer.style.display = 'none';
+        buttonContainer.style.display = 'block';
+        capturedImageBlob = null;
+        if (preview.src) {
+            URL.revokeObjectURL(preview.src);
+        }
+    });
+}
+
+// Choose file from gallery
+if (chooseFileBtn) {
+    chooseFileBtn.addEventListener('click', function() {
+        photoForm.style.display = 'block';
+        buttonContainer.style.display = 'none';
+    });
+}
+
+// Cancel file upload
+if (cancelFileBtn) {
+    cancelFileBtn.addEventListener('click', function() {
+        photoForm.style.display = 'none';
+        buttonContainer.style.display = 'block';
+        photo.value = '';
         uploadBtn.disabled = true;
-    }
-});
+    });
+}
+
+// Enable upload button when file is selected
+if (photo) {
+    photo.addEventListener('change', function() {
+        if (this.files && this.files.length > 0) {
+            uploadBtn.disabled = false;
+        } else {
+            uploadBtn.disabled = true;
+        }
+    });
+}
 </script>
 
 {% endblock %}
