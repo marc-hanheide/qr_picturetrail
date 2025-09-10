@@ -1,0 +1,179 @@
+{% extends 'layout.html' %}
+
+{% block body %}
+<!-- Simple navigation -->
+<nav class="navbar navbar-expand-lg navbar-light bg-light mb-3">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/trail">{{ app_data['project_name'] }}</a>
+        <div class="navbar-nav ms-auto">
+            <a class="nav-link" href="/trail"><i class="bi bi-map"></i> Trail</a>
+            <a class="nav-link active" href="/gallery"><i class="bi bi-camera"></i> Gallery</a>
+            <a class="nav-link" href="/qrs"><i class="bi bi-qr-code"></i> QR Codes</a>
+        </div>
+    </div>
+</nav>
+
+<div class="mt-4 p-5 bg-primary text-white rounded">
+    <h1>📸 Photo Gallery</h1>
+    <p class="lead">Check out all the amazing photos shared by trail participants!</p>
+    <a href="/trail" class="btn btn-light">← Back to Trail</a>
+</div>
+
+<div class="row mt-4">
+    {% if sessions %}
+        <!-- Pagination info -->
+        <div class="col-12 mb-3">
+            <p class="text-muted">
+                Showing {{ sessions|length }} of {{ total_sessions }} session groups 
+                (Page {{ page }} of {{ ((total_sessions - 1) // per_page) + 1 }})
+            </p>
+        </div>
+
+        {% for session in sessions %}
+        <div class="col-12 mb-4">
+            <div class="card">
+                <div class="card-header" data-bs-toggle="collapse" data-bs-target="#session-{{ loop.index }}" 
+                     aria-expanded="false" aria-controls="session-{{ loop.index }}" style="cursor: pointer;">
+                    <h5 class="mb-0">
+                        <i class="bi bi-chevron-down"></i>
+                        Session: {{ session.session_id[:8] }}... 
+                        <small class="text-muted">
+                            ({{ session.photo_count }} photo{{ 's' if session.photo_count != 1 else '' }}, 
+                            last updated: {{ session.most_recent.strftime('%Y-%m-%d %H:%M') }})
+                        </small>
+                    </h5>
+                </div>
+                <div class="collapse" id="session-{{ loop.index }}">
+                    <div class="card-body">
+                        <div class="row">
+                            {% for photo in session.photos %}
+                            <div class="col-md-4 col-lg-3 mb-3">
+                                <div class="card h-100">
+                                    <img src="../static/uploads/{{ photo.filename }}" 
+                                         class="card-img-top photo-thumbnail" 
+                                         alt="Photo of {{ photo.item_name }}" 
+                                         style="height: 200px; object-fit: cover; cursor: pointer;"
+                                         data-bs-toggle="modal" 
+                                         data-bs-target="#photoModal"
+                                         data-photo-src="../static/uploads/{{ photo.filename }}"
+                                         data-photo-title="{{ photo.item_name }}"
+                                         data-photo-date="{{ photo.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}"
+                                         data-photo-found="{{ photo.found_count }}">
+                                    <div class="card-body p-2">
+                                        <h6 class="card-title mb-1">{{ photo.item_name|title }}</h6>
+                                        <p class="card-text small mb-1">
+                                            <strong>📅 Date:</strong> {{ photo.timestamp.strftime('%Y-%m-%d %H:%M') }}<br>
+                                            <strong>🎯 Items found:</strong> {{ photo.found_count }}<br>
+                                            <strong>📱 Session:</strong> {{ photo.session_id[:8] }}...
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        <!-- Pagination controls -->
+        {% if has_prev or has_next %}
+        <div class="col-12">
+            <nav aria-label="Gallery pagination">
+                <ul class="pagination justify-content-center">
+                    {% if has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('gallery', page=prev_num) }}">« Previous</a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link">« Previous</span>
+                        </li>
+                    {% endif %}
+                    
+                    <li class="page-item active">
+                        <span class="page-link">{{ page }}</span>
+                    </li>
+                    
+                    {% if has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('gallery', page=next_num) }}">Next »</a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link">Next »</span>
+                        </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+
+    {% else %}
+        <div class="col-12">
+            <div class="alert alert-info text-center">
+                <h4>No photos yet!</h4>
+                <p>Be the first to share a photo by scanning QR codes on the trail!</p>
+                <a href="/trail" class="btn btn-primary">Start the Trail</a>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Photo Modal -->
+<div class="modal fade" id="photoModal" tabindex="-1" aria-labelledby="photoModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="photoModalLabel">Photo Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="modalPhoto" src="" class="img-fluid mb-3" alt="">
+                <div id="modalDetails">
+                    <p><strong>Item:</strong> <span id="modalTitle"></span></p>
+                    <p><strong>Date taken:</strong> <span id="modalDate"></span></p>
+                    <p><strong>Items found at time:</strong> <span id="modalFound"></span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Handle photo modal
+document.addEventListener('DOMContentLoaded', function() {
+    const photoModal = document.getElementById('photoModal');
+    const modalPhoto = document.getElementById('modalPhoto');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalDate = document.getElementById('modalDate');
+    const modalFound = document.getElementById('modalFound');
+    
+    photoModal.addEventListener('show.bs.modal', function(event) {
+        const button = event.relatedTarget;
+        modalPhoto.src = button.getAttribute('data-photo-src');
+        modalTitle.textContent = button.getAttribute('data-photo-title');
+        modalDate.textContent = button.getAttribute('data-photo-date');
+        modalFound.textContent = button.getAttribute('data-photo-found');
+    });
+    
+    // Handle collapse icons
+    document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(function(element) {
+        element.addEventListener('click', function() {
+            const icon = this.querySelector('i');
+            const target = document.querySelector(this.getAttribute('data-bs-target'));
+            
+            target.addEventListener('shown.bs.collapse', function() {
+                icon.className = 'bi bi-chevron-up';
+            });
+            
+            target.addEventListener('hidden.bs.collapse', function() {
+                icon.className = 'bi bi-chevron-down';
+            });
+        });
+    });
+});
+</script>
+
+{% endblock %}

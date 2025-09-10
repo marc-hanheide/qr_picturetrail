@@ -5,6 +5,7 @@ app_data = {
     "html_title": "WEL QR Picture Trail",
     "project_name": "WEL Picture Trail",
     "keywords": "qr, trail, kids, flask, webapp",
+    "upload_folder": "static/uploads/",
     "id_dict": {
         "9509af0a-1764-4095-aa5c-20726b654146": {
             "image": "sun",

@@ -1,6 +1,18 @@
 {% extends 'layout.html' %}
 
 {% block body %}
+<!-- Simple navigation -->
+<!-- <nav class="navbar navbar-expand-lg navbar-light bg-light mb-3">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/trail">{{ app_data['project_name'] }}</a>
+        <div class="navbar-nav ms-auto">
+            <a class="nav-link" href="/trail"><i class="bi bi-map"></i> Trail</a>
+            <a class="nav-link" href="/gallery"><i class="bi bi-camera"></i> Gallery</a>
+            <a class="nav-link" href="/qrs"><i class="bi bi-qr-code"></i> QR Codes</a>
+        </div>
+    </div>
+</nav> -->
+
 <div class="mt-4 p-5 bg-primary text-white rounded">
     <h1>{{ app_data['name'] }}</h1>
     <p class="lead">Welcome to our little interactive trail. Find all the {{ items_total }} posters spread around the West End listed below and scan their QR code with your phone. Use the hints for each poster below to get an idea where you may find it.</p>
@@ -8,13 +20,46 @@
         Explore Lincoln West End Lights on <a style="color:rgb(137, 255, 86)" href="https://www.lincoln-west-end-lights.com/illuminations-2024/" target="_blank">our map</a>.
     </strong></p>
 </div>
+
+<!-- Flash messages for photo upload feedback -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
 {% if found %}
 <div class="row">
         <div class="alert alert-success d-flex align-items-center alert-dismissible fade show" role="alert">
             <!--<svg class="bi flex-shrink-0 me-2" role="img" aria-label="Success:"><use xlink:href="#check-circle-fill"/></svg>-->
             <strong>Hooray! You have found the {{ app_data['id_dict'][found]['title'] }}! Look below for other pictures to search for.</strong>
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            
+        </div>
+        
+        <!-- Photo upload section -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5>📸 Share Your Discovery!</h5>
+            </div>
+            <div class="card-body">
+                <p>Would you like to take a photo of yourself with the {{ app_data['id_dict'][found]['title'] }} poster?</p>
+                <form method="POST" enctype="multipart/form-data" id="photoForm">
+                    <input type="hidden" name="item_id" value="{{ found }}">
+                    <div class="mb-3">
+                        <label for="photo" class="form-label">Choose a photo:</label>
+                        <input type="file" class="form-control" id="photo" name="photo" accept="image/*" capture="environment">
+                        <div class="form-text">You can take a new photo or choose one from your gallery.</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="uploadBtn" disabled>
+                        <i class="bi bi-upload"></i> Upload Photo
+                    </button>
+                </form>
+            </div>
         </div>
 </div>
 {% endif %}
@@ -81,5 +126,17 @@
 
 
 </div>
+
+<script>
+// Enable upload button when file is selected
+document.getElementById('photo').addEventListener('change', function() {
+    const uploadBtn = document.getElementById('uploadBtn');
+    if (this.files && this.files.length > 0) {
+        uploadBtn.disabled = false;
+    } else {
+        uploadBtn.disabled = true;
+    }
+});
+</script>
 
 {% endblock %}

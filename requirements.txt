@@ -2,4 +2,5 @@
 ###### Requirements without Version Specifiers ######
 flask
 qrcode[pil]
+Pillow
 black
