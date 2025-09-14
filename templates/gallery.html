@@ -29,33 +29,45 @@
             </p>
         </div>
 
-        {% for session in sessions %}
-        <div class="col-12 mb-4">
-            <div class="card">
-                <div class="card-header" data-bs-toggle="collapse" data-bs-target="#session-{{ loop.index }}" 
-                     aria-expanded="false" aria-controls="session-{{ loop.index }}" style="cursor: pointer;">
-                    <h5 class="mb-0">
-                        <i class="bi bi-chevron-down"></i>
-                        Session: {{ session.session_id[:8] }}... 
-                        <small class="text-muted">
-                            ({{ session.photo_count }} photo{{ 's' if session.photo_count != 1 else '' }}, 
-                            {{ session.total_found }} item{{ 's' if session.total_found != 1 else '' }} found,
-                            created: {{ session.created.strftime('%Y-%m-%d %H:%M') }})
-                        </small>
-                    </h5>
-                    {% if session.items_found %}
-                    <div class="mt-2">
-                        <small class="text-muted">
-                            <strong>Items found:</strong> 
-                            {% for item_id, item_info in session.items_found.items() %}
-                                {{ item_info.name|title }}{% if not loop.last %}, {% endif %}
-                            {% endfor %}
-                        </small>
-                    </div>
-                    {% endif %}
-                </div>
-                <div class="collapse" id="session-{{ loop.index }}">
-                    <div class="card-body">
+        <!-- Sessions Accordion -->
+        <div class="accordion" id="sessionsAccordion">
+            {% for session in sessions %}
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" 
+                            data-bs-toggle="collapse" 
+                            data-bs-target="#session-{{ loop.index }}" 
+                            aria-expanded="false" 
+                            aria-controls="session-{{ loop.index }}">
+                        <div class="w-100">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <strong>Session: {{ session.session_id }}</strong>
+                                <small class="text-muted ms-2">
+                                    {{ session.photo_count }} photo{{ 's' if session.photo_count != 1 else '' }}, 
+                                    {{ session.total_found }} item{{ 's' if session.total_found != 1 else '' }} found
+                                </small>
+                            </div>
+                            <div class="mt-1">
+                                <small class="text-muted">
+                                    Created: {{ session.created.strftime('%Y-%m-%d %H:%M') }}
+                                </small>
+                                {% if session.items_found %}
+                                <span class="text-muted"> • </span>
+                                <small class="text-muted">
+                                    <strong>Items found:</strong> 
+                                    {% for item_id, item_info in session.items_found.items() %}
+                                        {{ item_info.name|title }}{% if not loop.last %}, {% endif %}
+                                    {% endfor %}
+                                </small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </button>
+                </h2>
+                <div id="session-{{ loop.index }}" class="accordion-collapse collapse">
+                     
+                    <div class="accordion-body">
+                        {% if session.photos %}
                         <div class="row">
                             {% for photo in session.photos %}
                             <div class="col-md-4 col-lg-3 mb-3">
@@ -82,11 +94,16 @@
                             </div>
                             {% endfor %}
                         </div>
+                        {% else %}
+                        <div class="text-center text-muted py-3">
+                            <p><em>No photos uploaded for this session yet.</em></p>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
+            {% endfor %}
         </div>
-        {% endfor %}
 
         <!-- Pagination controls -->
         {% if has_prev or has_next %}
@@ -167,23 +184,6 @@ document.addEventListener('DOMContentLoaded', function() {
         modalTitle.textContent = button.getAttribute('data-photo-title');
         modalDate.textContent = button.getAttribute('data-photo-date');
         modalFound.textContent = button.getAttribute('data-photo-found');
-    });
-    
-    // Handle collapse icons - add event listeners to collapse targets, not headers
-    document.querySelectorAll('.collapse').forEach(function(collapseElement) {
-        const headerId = collapseElement.id.replace('session-', '');
-        const header = document.querySelector('[data-bs-target="#' + collapseElement.id + '"]');
-        const icon = header ? header.querySelector('i') : null;
-        
-        if (icon) {
-            collapseElement.addEventListener('shown.bs.collapse', function() {
-                icon.className = 'bi bi-chevron-up';
-            });
-            
-            collapseElement.addEventListener('hidden.bs.collapse', function() {
-                icon.className = 'bi bi-chevron-down';
-            });
-        }
     });
 });
 </script>

@@ -144,9 +144,9 @@
         <tbody>
         {% for item in app_data['id_dict'] %}
             {% if session["found_" + item] %}
-                <tr style="background-color: lightgreen;">
+                <tr class="table-success">
             {% else %}
-                <tr style="background-color: lightcoral;">
+                <tr class="table-danger">
             {% endif %}
                     <td style="text-align: center;">
                         <!-- <h4>{{ app_data['id_dict'][item] }}</h4> -->

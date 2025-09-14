@@ -411,8 +411,8 @@ def gallery():
                     }
                     sessions.append(session_info)
     
-    # Sort sessions by most recent activity
-    sessions.sort(key=lambda x: x['most_recent'], reverse=True)
+    # Sort sessions by photo count (primary) and total found items (secondary), both descending
+    sessions.sort(key=lambda x: (x['photo_count'], x['total_found']), reverse=True)
     
     # Implement pagination
     total_sessions = len(sessions)
