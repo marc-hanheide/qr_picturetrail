@@ -7,16 +7,25 @@ https://github.com/petersimeth/basic-flask-template
 © MIT licensed, 2018-2023
 """
 
-from flask import Flask, render_template, request, send_file, session, redirect, flash, url_for
-from uuid import uuid4
+# Standard library imports
+import re
+import json
 from csv import DictWriter
 from datetime import datetime
 from os import path, listdir, makedirs
-from werkzeug.utils import secure_filename
-import re
-import glob
+from uuid import uuid4
 
+# Third-party imports
+from flask import Flask, render_template, request, send_file, session, redirect, flash, url_for
+
+# Local imports
 from config import app_data
+
+
+def generate_session_id():
+    """Generate a human-readable session ID using coolname library (62+ billion combinations)."""
+    from coolname import generate_slug
+    return generate_slug(3)  # Generate 3-word slug like "ambitious-turaco-of-joviality"
 
 DEVELOPMENT_ENV = True
 
@@ -83,8 +92,95 @@ def allowed_file(filename):
 
 
 def generate_photo_filename(item_name, session_id, found_count):
+    """Generate photo filename and ensure session directory exists."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return f"{item_name}_{timestamp}_{session_id}_{found_count}.jpg"
+    filename = f"{item_name}_{timestamp}_{found_count}.jpg"
+    
+    # Create session directory path
+    session_dir = path.join(app_data['upload_folder'], session_id)
+    makedirs(session_dir, exist_ok=True)
+    
+    return session_dir, filename
+
+
+def get_session_json_path(session_id):
+    """Get the path to the trail.json file for a session."""
+    session_dir = path.join(app_data['upload_folder'], session_id)
+    return path.join(session_dir, 'trail.json')
+
+
+def load_session_data(session_id):
+    """Load session data from trail.json file."""
+    json_path = get_session_json_path(session_id)
+    if path.exists(json_path):
+        try:
+            with open(json_path, 'r') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            pass
+    
+    # Return default session data if file doesn't exist or is corrupted
+    return {
+        'session_id': session_id,
+        'created': datetime.now().isoformat(),
+        'items_found': {},
+        'photos': [],
+        'total_found': 0,
+        'last_updated': datetime.now().isoformat()
+    }
+
+
+def save_session_data(session_id, session_data):
+    """Save session data to trail.json file."""
+    session_data['last_updated'] = datetime.now().isoformat()
+    json_path = get_session_json_path(session_id)
+    
+    # Ensure directory exists
+    session_dir = path.dirname(json_path)
+    makedirs(session_dir, exist_ok=True)
+    
+    try:
+        with open(json_path, 'w') as f:
+            json.dump(session_data, f, indent=2)
+    except IOError as e:
+        print(f"Could not save session data: {e}")
+
+
+def update_session_with_item(session_id, item_id, item_name):
+    """Update session data when an item is found."""
+    session_data = load_session_data(session_id)
+    
+    if item_id not in session_data['items_found']:
+        session_data['items_found'][item_id] = {
+            'name': item_name,
+            'found_at': datetime.now().isoformat(),
+            'photos': []
+        }
+        session_data['total_found'] = len(session_data['items_found'])
+    
+    save_session_data(session_id, session_data)
+    return session_data
+
+
+def add_photo_to_session(session_id, item_id, filename):
+    """Add a photo record to the session data."""
+    session_data = load_session_data(session_id)
+    
+    photo_info = {
+        'filename': filename,
+        'item_id': item_id,
+        'uploaded_at': datetime.now().isoformat()
+    }
+    
+    # Add to general photos list
+    session_data['photos'].append(photo_info)
+    
+    # Add to specific item if it exists
+    if item_id in session_data['items_found']:
+        session_data['items_found'][item_id]['photos'].append(filename)
+    
+    save_session_data(session_id, session_data)
+    return session_data
 
 
 @app.route("/")
@@ -108,7 +204,7 @@ def initialise_session():
     session.permanent = True
     app.permanent_session_lifetime = 3600
     if "id" not in session:
-        session["id"] = uuid4().hex
+        session["id"] = generate_session_id()
     for item in app_data["id_dict"]:
         found_id = "found_" + item
         if found_id not in session:
@@ -129,13 +225,16 @@ def trail():
             # Count current found items
             items_found = sum(1 for item in app_data["id_dict"] if session["found_" + item])
             
-            # Generate filename
+            # Generate filename and session directory
             item_name = app_data["id_dict"][item_id]["image"]
-            filename = generate_photo_filename(item_name, session["id"], items_found)
+            session_dir, filename = generate_photo_filename(item_name, session["id"], items_found)
             
             # Save file
-            file_path = path.join(app.config['UPLOAD_FOLDER'], filename)
+            file_path = path.join(session_dir, filename)
             file.save(file_path)
+            
+            # Update session data with photo
+            add_photo_to_session(session["id"], item_id, filename)
             
             flash('Photo uploaded successfully!', 'success')
         else:
@@ -147,6 +246,10 @@ def trail():
     if id in app_data["id_dict"]:
         found_id = "found_" + id
         session[found_id] = True
+        
+        # Update session data with found item
+        item_name = app_data["id_dict"][id]["image"]
+        update_session_with_item(session["id"], id, item_name)
     
     items_found = 0
     for item in app_data["id_dict"]:
@@ -222,75 +325,100 @@ def qrs():
     )
 
 
-def parse_photo_filename(filename):
-    """Parse photo filename to extract metadata."""
-    # Expected format: itemname_YYYYMMDD_HHMMSS_sessionid_foundcount.jpg
-    pattern = r'^(.+?)_(\d{8}_\d{6})_([^_]+)_(\d+)\.(jpg|jpeg|png|gif)$'
-    match = re.match(pattern, filename)
-    
-    if match:
-        item_name, timestamp_str, session_id, found_count, ext = match.groups()
-        try:
-            timestamp = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
-            return {
-                'filename': filename,
-                'item_name': item_name,
-                'timestamp': timestamp,
-                'session_id': session_id,
-                'found_count': int(found_count),
-                'extension': ext
-            }
-        except ValueError:
-            return None
-    return None
-
-
 @app.route("/gallery")
 def gallery():
     page = request.args.get('page', 1, type=int)
     per_page = 25
     
-    # Get all photos from upload folder
     upload_folder = app.config['UPLOAD_FOLDER']
-    photo_files = []
+    sessions = []
     
     if path.exists(upload_folder):
-        for filename in listdir(upload_folder):
-            if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
-                photo_data = parse_photo_filename(filename)
-                if photo_data:
-                    photo_files.append(photo_data)
+        # Get all session directories
+        for item in listdir(upload_folder):
+            session_path = path.join(upload_folder, item)
+            if path.isdir(session_path):
+                session_data = load_session_data(item)
+                
+                # Get photo files in session directory
+                photo_files = []
+                for filename in listdir(session_path):
+                    if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
+                        photo_path = path.join(session_path, filename)
+                        if path.isfile(photo_path):
+                            # Get file timestamp as fallback
+                            file_stat = path.getmtime(photo_path)
+                            file_timestamp = datetime.fromtimestamp(file_stat)
+                            
+                            # Try to find photo info in session data
+                            photo_info = None
+                            for photo in session_data.get('photos', []):
+                                if photo['filename'] == filename:
+                                    photo_info = photo
+                                    break
+                            
+                            # Find item name for this photo
+                            item_name = 'unknown'
+                            if photo_info and photo_info.get('item_id'):
+                                item_id = photo_info['item_id']
+                                if item_id in app_data['id_dict']:
+                                    item_name = app_data['id_dict'][item_id]['image']
+                                elif item_id in session_data.get('items_found', {}):
+                                    item_name = session_data['items_found'][item_id]['name']
+                            else:
+                                # Try to extract from filename as fallback
+                                name_part = filename.split('_')[0] if '_' in filename else filename.split('.')[0]
+                                item_name = name_part
+                            
+                            photo_data = {
+                                'filename': filename,
+                                'item_name': item_name,
+                                'timestamp': datetime.fromisoformat(photo_info['uploaded_at']) if photo_info else file_timestamp,
+                                'session_id': item,
+                                'found_count': session_data.get('total_found', 0),
+                                'session_path': item  # For constructing image URLs
+                            }
+                            photo_files.append(photo_data)
+                
+                if photo_files or session_data.get('items_found'):
+                    # Sort photos by timestamp (most recent first)
+                    photo_files.sort(key=lambda x: x['timestamp'], reverse=True)
+                    
+                    # Get most recent activity timestamp
+                    timestamps = []
+                    if photo_files:
+                        timestamps.extend([photo['timestamp'] for photo in photo_files])
+                    
+                    # Add item found timestamps
+                    for item_info in session_data.get('items_found', {}).values():
+                        if 'found_at' in item_info:
+                            timestamps.append(datetime.fromisoformat(item_info['found_at']))
+                    
+                    # Add session creation time
+                    if 'created' in session_data:
+                        timestamps.append(datetime.fromisoformat(session_data['created']))
+                    
+                    most_recent = max(timestamps) if timestamps else datetime.now()
+                    
+                    session_info = {
+                        'session_id': item,
+                        'photos': photo_files,
+                        'most_recent': most_recent,
+                        'photo_count': len(photo_files),
+                        'total_found': session_data.get('total_found', 0),
+                        'items_found': session_data.get('items_found', {}),
+                        'created': datetime.fromisoformat(session_data['created']) if 'created' in session_data else most_recent
+                    }
+                    sessions.append(session_info)
     
-    # Group photos by session
-    sessions = {}
-    for photo in photo_files:
-        session_id = photo['session_id']
-        if session_id not in sessions:
-            sessions[session_id] = []
-        sessions[session_id].append(photo)
-    
-    # Sort photos within each session by timestamp (most recent first)
-    for session_id in sessions:
-        sessions[session_id].sort(key=lambda x: x['timestamp'], reverse=True)
-    
-    # Sort sessions by the timestamp of their most recent photo
-    sorted_sessions = []
-    for session_id, photos in sessions.items():
-        most_recent_timestamp = max(photo['timestamp'] for photo in photos)
-        sorted_sessions.append({
-            'session_id': session_id,
-            'photos': photos,
-            'most_recent': most_recent_timestamp,
-            'photo_count': len(photos)
-        })
-    
-    sorted_sessions.sort(key=lambda x: x['most_recent'], reverse=True)
+    # Sort sessions by most recent activity
+    sessions.sort(key=lambda x: x['most_recent'], reverse=True)
     
     # Implement pagination
-    total_sessions = len(sorted_sessions)
+    total_sessions = len(sessions)
     start = (page - 1) * per_page
     end = start + per_page
-    paginated_sessions = sorted_sessions[start:end]
+    paginated_sessions = sessions[start:end]
     
     # Calculate pagination info
     has_prev = page > 1

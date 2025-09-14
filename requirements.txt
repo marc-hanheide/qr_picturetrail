@@ -4,3 +4,4 @@ flask
 qrcode[pil]
 Pillow
 black
+coolname

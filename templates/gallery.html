@@ -39,9 +39,20 @@
                         Session: {{ session.session_id[:8] }}... 
                         <small class="text-muted">
                             ({{ session.photo_count }} photo{{ 's' if session.photo_count != 1 else '' }}, 
-                            last updated: {{ session.most_recent.strftime('%Y-%m-%d %H:%M') }})
+                            {{ session.total_found }} item{{ 's' if session.total_found != 1 else '' }} found,
+                            created: {{ session.created.strftime('%Y-%m-%d %H:%M') }})
                         </small>
                     </h5>
+                    {% if session.items_found %}
+                    <div class="mt-2">
+                        <small class="text-muted">
+                            <strong>Items found:</strong> 
+                            {% for item_id, item_info in session.items_found.items() %}
+                                {{ item_info.name|title }}{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        </small>
+                    </div>
+                    {% endif %}
                 </div>
                 <div class="collapse" id="session-{{ loop.index }}">
                     <div class="card-body">
@@ -49,13 +60,13 @@
                             {% for photo in session.photos %}
                             <div class="col-md-4 col-lg-3 mb-3">
                                 <div class="card h-100">
-                                    <img src="../static/uploads/{{ photo.filename }}" 
+                                    <img src="../static/uploads/{{ photo.session_path }}/{{ photo.filename }}" 
                                          class="card-img-top photo-thumbnail" 
                                          alt="Photo of {{ photo.item_name }}" 
                                          style="height: 200px; object-fit: cover; cursor: pointer;"
                                          data-bs-toggle="modal" 
                                          data-bs-target="#photoModal"
-                                         data-photo-src="../static/uploads/{{ photo.filename }}"
+                                         data-photo-src="../static/uploads/{{ photo.session_path }}/{{ photo.filename }}"
                                          data-photo-title="{{ photo.item_name }}"
                                          data-photo-date="{{ photo.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}"
                                          data-photo-found="{{ photo.found_count }}">
@@ -158,20 +169,21 @@ document.addEventListener('DOMContentLoaded', function() {
         modalFound.textContent = button.getAttribute('data-photo-found');
     });
     
-    // Handle collapse icons
-    document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(function(element) {
-        element.addEventListener('click', function() {
-            const icon = this.querySelector('i');
-            const target = document.querySelector(this.getAttribute('data-bs-target'));
-            
-            target.addEventListener('shown.bs.collapse', function() {
+    // Handle collapse icons - add event listeners to collapse targets, not headers
+    document.querySelectorAll('.collapse').forEach(function(collapseElement) {
+        const headerId = collapseElement.id.replace('session-', '');
+        const header = document.querySelector('[data-bs-target="#' + collapseElement.id + '"]');
+        const icon = header ? header.querySelector('i') : null;
+        
+        if (icon) {
+            collapseElement.addEventListener('shown.bs.collapse', function() {
                 icon.className = 'bi bi-chevron-up';
             });
             
-            target.addEventListener('hidden.bs.collapse', function() {
+            collapseElement.addEventListener('hidden.bs.collapse', function() {
                 icon.className = 'bi bi-chevron-down';
             });
-        });
+        }
     });
 });
 </script>
