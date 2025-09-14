@@ -49,7 +49,7 @@
                             </div>
                             <div class="mt-1">
                                 <small class="text-muted">
-                                    Created: {{ session.created.strftime('%Y-%m-%d %H:%M') }}
+                                    Created: <span class="utc-timestamp" data-utc="{{ session.created.isoformat() }}">{{ session.created.strftime('%Y-%m-%d %H:%M') }}</span>
                                 </small>
                                 {% if session.items_found %}
                                 <span class="text-muted"> • </span>
@@ -80,12 +80,12 @@
                                          data-bs-target="#photoModal"
                                          data-photo-src="../static/uploads/{{ photo.session_path }}/{{ photo.filename }}"
                                          data-photo-title="{{ photo.item_name }}"
-                                         data-photo-date="{{ photo.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}"
+                                         data-photo-date="{{ photo.timestamp.isoformat() }}"
                                          data-photo-found="{{ photo.found_count }}">
                                     <div class="card-body p-2">
                                         <h6 class="card-title mb-1">{{ photo.item_name|title }}</h6>
                                         <p class="card-text small mb-1">
-                                            <strong>📅 Date:</strong> {{ photo.timestamp.strftime('%Y-%m-%d %H:%M') }}<br>
+                                            <strong>📅 Date:</strong> <span class="utc-timestamp" data-utc="{{ photo.timestamp.isoformat() }}">{{ photo.timestamp.strftime('%Y-%m-%d %H:%M') }}</span><br>
                                             <strong>🎯 Items found:</strong> {{ photo.found_count }}<br>
                                             <strong>📱 Session:</strong> {{ photo.session_id[:8] }}...
                                         </p>
@@ -170,8 +170,30 @@
 </div>
 
 <script>
+// Function to convert UTC timestamp to local time
+function convertUTCToLocal(utcTimestamp, format = 'full') {
+    const date = new Date(utcTimestamp);
+    
+    if (format === 'full') {
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+    } else if (format === 'short') {
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    }
+    
+    return date.toLocaleString();
+}
+
 // Handle photo modal
 document.addEventListener('DOMContentLoaded', function() {
+    // Convert all UTC timestamps to local time
+    const utcTimestamps = document.querySelectorAll('.utc-timestamp');
+    utcTimestamps.forEach(function(element) {
+        const utcTime = element.getAttribute('data-utc');
+        if (utcTime) {
+            element.textContent = convertUTCToLocal(utcTime, 'short');
+        }
+    });
+    
     const photoModal = document.getElementById('photoModal');
     const modalPhoto = document.getElementById('modalPhoto');
     const modalTitle = document.getElementById('modalTitle');
@@ -182,7 +204,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const button = event.relatedTarget;
         modalPhoto.src = button.getAttribute('data-photo-src');
         modalTitle.textContent = button.getAttribute('data-photo-title');
-        modalDate.textContent = button.getAttribute('data-photo-date');
+        
+        // Convert UTC timestamp to local time for modal
+        const utcDate = button.getAttribute('data-photo-date');
+        modalDate.textContent = convertUTCToLocal(utcDate, 'full');
+        
         modalFound.textContent = button.getAttribute('data-photo-found');
     });
 });

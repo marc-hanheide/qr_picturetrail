@@ -10,13 +10,15 @@ https://github.com/petersimeth/basic-flask-template
 # Standard library imports
 import re
 import json
+import os
 from csv import DictWriter
-from datetime import datetime
+from datetime import datetime, timezone
 from os import path, listdir, makedirs
 from uuid import uuid4
 
 # Third-party imports
-from flask import Flask, render_template, request, send_file, session, redirect, flash, url_for
+from flask import Flask, render_template, request, send_file, session, redirect, flash, url_for, make_response
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from PIL import Image
 
 # Local imports
@@ -32,6 +34,9 @@ DEVELOPMENT_ENV = True
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = uuid4().bytes
+
+# Cookie serializer for secure admin authentication cookies
+cookie_serializer = URLSafeTimedSerializer(app.secret_key)
 
 # Add custom filter to check if file exists
 @app.template_filter('file_exists')
@@ -92,6 +97,69 @@ def allowed_file(filename):
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def check_admin_access():
+    """
+    Check if the request has valid admin access token.
+    Token can be provided as:
+    - URL parameter: ?token=<token>
+    - Authorization header: Authorization: Bearer <token>
+    - Valid authentication cookie
+    
+    Returns tuple: (is_authenticated, token_provided_in_request)
+    """
+    admin_token = os.environ.get('TRAIL_ADMIN_ACCESS_TOKEN')
+    
+    if not admin_token:
+        return False, False
+    
+    # Check for valid cookie first
+    auth_cookie = request.cookies.get('admin_auth')
+    if auth_cookie:
+        try:
+            # Verify cookie signature and check if it's not expired (4 weeks = 2419200 seconds)
+            cookie_data = cookie_serializer.loads(auth_cookie, max_age=2419200)
+            if cookie_data == admin_token:
+                return True, False  # Authenticated via cookie, no token in request
+        except (BadSignature, SignatureExpired):
+            # Cookie is invalid or expired, continue to check other methods
+            pass
+    
+    # Check URL parameter
+    provided_token = request.args.get('token')
+    if provided_token and provided_token == admin_token:
+        return True, True  # Authenticated via token, token provided in request
+    
+    # Check Authorization header
+    auth_header = request.headers.get('Authorization')
+    if auth_header and auth_header.startswith('Bearer '):
+        bearer_token = auth_header.split(' ', 1)[1]
+        if bearer_token == admin_token:
+            return True, True  # Authenticated via header, token provided in request
+    
+    return False, False
+
+
+def set_admin_auth_cookie(response):
+    """
+    Set a secure authentication cookie that's valid for 4 weeks.
+    """
+    admin_token = os.environ.get('TRAIL_ADMIN_ACCESS_TOKEN')
+    if admin_token:
+        # Create signed cookie with the admin token
+        cookie_value = cookie_serializer.dumps(admin_token)
+        
+        # Set cookie for 4 weeks (2419200 seconds)
+        response.set_cookie(
+            'admin_auth',
+            cookie_value,
+            max_age=2419200,  # 4 weeks in seconds
+            secure=request.is_secure,  # Only send over HTTPS in production
+            httponly=True,  # Prevent JavaScript access
+            samesite='Lax'  # CSRF protection
+        )
+    return response
+
+
 def rescale_image(file_path, max_size=1024):
     """
     Rescale an image to fit within max_size x max_size while maintaining aspect ratio.
@@ -141,7 +209,7 @@ def rescale_image(file_path, max_size=1024):
 
 def generate_photo_filename(item_name, session_id, found_count):
     """Generate photo filename and ensure session directory exists."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"{item_name}_{timestamp}_{found_count}.jpg"
     
     # Create session directory path
@@ -170,17 +238,17 @@ def load_session_data(session_id):
     # Return default session data if file doesn't exist or is corrupted
     return {
         'session_id': session_id,
-        'created': datetime.now().isoformat(),
+        'created': datetime.now(timezone.utc).isoformat(),
         'items_found': {},
         'photos': [],
         'total_found': 0,
-        'last_updated': datetime.now().isoformat()
+        'last_updated': datetime.now(timezone.utc).isoformat()
     }
 
 
 def save_session_data(session_id, session_data):
     """Save session data to trail.json file."""
-    session_data['last_updated'] = datetime.now().isoformat()
+    session_data['last_updated'] = datetime.now(timezone.utc).isoformat()
     json_path = get_session_json_path(session_id)
     
     # Ensure directory exists
@@ -201,7 +269,7 @@ def update_session_with_item(session_id, item_id, item_name):
     if item_id not in session_data['items_found']:
         session_data['items_found'][item_id] = {
             'name': item_name,
-            'found_at': datetime.now().isoformat(),
+            'found_at': datetime.now(timezone.utc).isoformat(),
             'photos': []
         }
         session_data['total_found'] = len(session_data['items_found'])
@@ -217,7 +285,7 @@ def add_photo_to_session(session_id, item_id, filename):
     photo_info = {
         'filename': filename,
         'item_id': item_id,
-        'uploaded_at': datetime.now().isoformat()
+        'uploaded_at': datetime.now(timezone.utc).isoformat()
     }
     
     # Add to general photos list
@@ -321,7 +389,7 @@ def trail():
                     ).split(",")[0],
                     "user_agent": request.user_agent.string,
                     "referrer": request.referrer,
-                    "timestamp": datetime.now().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             )
             csv_file.flush()
@@ -371,6 +439,17 @@ def log():
 
 @app.route("/qrs")
 def qrs():
+    is_authenticated, token_provided = check_admin_access()
+    
+    if not is_authenticated:
+        return "Access denied. Valid admin token required.", 403
+    
+    # If token was provided in the request, set cookie and redirect to clean URL
+    if token_provided:
+        response = make_response(redirect(url_for('qrs')))
+        response = set_admin_auth_cookie(response)
+        return response
+    
     return render_template(
         "qrs.html", app_data=app_data, base_url=get_base_url(request)
     )
@@ -378,6 +457,20 @@ def qrs():
 
 @app.route("/gallery")
 def gallery():
+    is_authenticated, token_provided = check_admin_access()
+    
+    if not is_authenticated:
+        return "Access denied. Valid admin token required.", 403
+    
+    # If token was provided in the request, set cookie and redirect to clean URL
+    if token_provided:
+        # Preserve page parameter in redirect
+        page = request.args.get('page', 1, type=int)
+        redirect_url = url_for('gallery', page=page) if page != 1 else url_for('gallery')
+        response = make_response(redirect(redirect_url))
+        response = set_admin_auth_cookie(response)
+        return response
+    
     page = request.args.get('page', 1, type=int)
     per_page = 25
     
@@ -449,7 +542,7 @@ def gallery():
                     if 'created' in session_data:
                         timestamps.append(datetime.fromisoformat(session_data['created']))
                     
-                    most_recent = max(timestamps) if timestamps else datetime.now()
+                    most_recent = max(timestamps) if timestamps else datetime.now(timezone.utc)
                     
                     session_info = {
                         'session_id': item,

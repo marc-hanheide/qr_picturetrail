@@ -16,7 +16,7 @@
 <div class="mt-4 p-5 bg-primary text-white rounded">
     <h1>{{ app_data['name'] }}</h1>
     <p class="lead">Welcome to our little interactive trail. Find all the {{ items_total }} locations.</p>
-    <p class="small mb-0">Your unique ID: <code class="text-light">{{ session['id'] }}</code></p>
+    <p class="small mb-0">Your unique ID: <strong><code class="text-light">{{ session['id'] }}</code></strong></p>
 </div>
 
 <!-- Flash messages for photo upload feedback -->
@@ -32,15 +32,15 @@
 {% endwith %}
 
 {% if found %}
-<div class="row">
         
         <!-- Photo upload section -->
         <div class="card mt-3">
-            <div class="card-header">
-                <h5>📸 Share Your Discovery!</h5>
+            <div class="card-header bg-success text-white">
+                <h5>Hooray! You have found <i>{{ app_data['id_dict'][found]['title'] }}</i>!</h5>
             </div>
             <div class="card-body">
-                <strong>Hooray! You have found the <i>{{ app_data['id_dict'][found]['title'] }}</i>!</strong>
+
+                <h5>📸 Share Your Discovery!</h5>
 
                 <p><strong>{{ app_data['id_dict'][found]['text'] }}</strong></p>
                 
@@ -107,10 +107,9 @@
                 </form>
             </div>
         </div>
-</div>
+
 {% endif %}
 
-<div class="row">
     {% if items_found == items_total %}
     <h2>You completed the Trail!</h2>
         <div class="alert alert-success d-flex align-items-center alert-dismissible fade show" role="alert">
@@ -174,7 +173,6 @@
     </table>
 
 
-</div>
 
 <script>
 let stream = null;

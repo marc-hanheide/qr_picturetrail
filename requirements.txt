@@ -5,3 +5,4 @@ qrcode[pil]
 Pillow
 black
 coolname
+itsdangerous

@@ -7,6 +7,8 @@ services:
       dockerfile: .devcontainer/Dockerfile
     volumes:
       - .:/app
+    environment:
+      - TRAIL_ADMIN_ACCESS_TOKEN=${TRAIL_ADMIN_ACCESS_TOKEN}
 
   zrok:
     # currently requires the old version as the server hasn't been updated yet
