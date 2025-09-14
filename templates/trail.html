@@ -16,6 +16,7 @@
 <div class="mt-4 p-5 bg-primary text-white rounded">
     <h1>{{ app_data['name'] }}</h1>
     <p class="lead">Welcome to our little interactive trail. Find all the {{ items_total }} locations.</p>
+    <p class="small mb-0">Your unique ID: <code class="text-light">{{ session['id'] }}</code></p>
 </div>
 
 <!-- Flash messages for photo upload feedback -->
@@ -32,11 +33,6 @@
 
 {% if found %}
 <div class="row">
-        <div class="alert alert-success d-flex align-items-center alert-dismissible fade show" role="alert">
-            <!--<svg class="bi flex-shrink-0 me-2" role="img" aria-label="Success:"><use xlink:href="#check-circle-fill"/></svg>-->
-            <strong>Hooray! You have found the {{ app_data['id_dict'][found]['title'] }}! Look below for other pictures to search for.</strong>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
         
         <!-- Photo upload section -->
         <div class="card mt-3">
@@ -44,8 +40,12 @@
                 <h5>📸 Share Your Discovery!</h5>
             </div>
             <div class="card-body">
-                <p>{{ app_data['id_dict'][found]['text'] }}</p>
+                <strong>Hooray! You have found the <i>{{ app_data['id_dict'][found]['title'] }}</i>!</strong>
+
+                <p><strong>{{ app_data['id_dict'][found]['text'] }}</strong></p>
                 
+                <p>Once done, look below for other pictures to search for.</p>
+
                 <!-- Camera buttons -->
                 <div class="mb-3" id="buttonContainer">
                     <button type="button" class="btn btn-success me-2" id="openCameraBtn">

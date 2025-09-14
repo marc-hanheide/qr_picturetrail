@@ -17,6 +17,7 @@ from uuid import uuid4
 
 # Third-party imports
 from flask import Flask, render_template, request, send_file, session, redirect, flash, url_for
+from PIL import Image
 
 # Local imports
 from config import app_data
@@ -89,6 +90,53 @@ csv_file.flush()
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def rescale_image(file_path, max_size=1024):
+    """
+    Rescale an image to fit within max_size x max_size while maintaining aspect ratio.
+    
+    Args:
+        file_path (str): Path to the image file
+        max_size (int): Maximum width or height in pixels
+    """
+    try:
+        with Image.open(file_path) as img:
+            # Get original dimensions
+            original_width, original_height = img.size
+            
+            # Skip rescaling if image is already smaller than max_size
+            if original_width <= max_size and original_height <= max_size:
+                return
+            
+            # Calculate new dimensions while maintaining aspect ratio
+            if original_width > original_height:
+                # Landscape orientation
+                new_width = max_size
+                new_height = int((original_height * max_size) / original_width)
+            else:
+                # Portrait or square orientation
+                new_height = max_size
+                new_width = int((original_width * max_size) / original_height)
+            
+            # Resize the image
+            resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            
+            # Save the resized image, preserving the original format
+            # Convert RGBA to RGB if saving as JPEG
+            if img.format == 'JPEG' or file_path.lower().endswith('.jpg') or file_path.lower().endswith('.jpeg'):
+                if resized_img.mode == 'RGBA':
+                    # Create a white background
+                    background = Image.new('RGB', resized_img.size, (255, 255, 255))
+                    background.paste(resized_img, mask=resized_img.split()[-1] if resized_img.mode == 'RGBA' else None)
+                    resized_img = background
+                resized_img.save(file_path, 'JPEG', quality=90, optimize=True)
+            else:
+                resized_img.save(file_path, quality=90, optimize=True)
+                
+    except Exception as e:
+        print(f"Error rescaling image {file_path}: {e}")
+        # If rescaling fails, the original image remains unchanged
 
 
 def generate_photo_filename(item_name, session_id, found_count):
@@ -232,6 +280,9 @@ def trail():
             # Save file
             file_path = path.join(session_dir, filename)
             file.save(file_path)
+            
+            # Rescale the uploaded image to max 1024x1024 while maintaining aspect ratio
+            rescale_image(file_path, max_size=1024)
             
             # Update session data with photo
             add_photo_to_session(session["id"], item_id, filename)
