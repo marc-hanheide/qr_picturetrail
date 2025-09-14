@@ -13,10 +13,10 @@
     </div>
 </nav> -->
 
-<div class="mt-4 p-5 bg-primary text-white rounded">
+<div class="mt-4 p-5 bg-primary text-white text-center rounded">
     <h1>{{ app_data['name'] }}</h1>
     <p class="lead">Welcome to our interactive trail. Find the {{ items_total }} locations.</p>
-    <p class="small mb-0">Your unique ID: <strong><code class="text-light">{{ session['id'] }}</code></strong></p>
+    <p class="mb-0 text-center">Your unique ID: <strong><code class="text-light">{{ session['id'] }}</code></strong></p>
 </div>
 
 <!-- Flash messages for photo upload feedback -->
@@ -64,6 +64,9 @@
                     <div class="mt-2">
                         <button type="button" class="btn btn-primary" id="captureBtn">
                             <i class="bi bi-camera-fill"></i> Capture Photo
+                        </button>
+                        <button type="button" class="btn btn-info me-2" id="switchCameraBtn">
+                            <i class="bi bi-arrow-repeat"></i> Switch Camera
                         </button>
                         <button type="button" class="btn btn-secondary" id="closeCameraBtn">
                             <i class="bi bi-x"></i> Close Camera
@@ -121,7 +124,7 @@
                 <a href="../static/certificate.pdf" target="_blank">
                     <img style="width: 100%;" src="../static/certificate.png" class="img-fluid rounded" alt="certificate" />
                 </a>
-                <a href="/">Click here to start over.</a>
+                <a href="/?reset=true">Click here to start over.</a>
             </strong>
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
@@ -199,6 +202,14 @@
         </tbody>
                     
     </table>
+
+    <!-- Start Over Button -->
+<div class="text-center mt-3">
+    <button type="button" class="btn btn-outline-danger btn-sm" id="startOverBtn">
+        <i class="bi bi-arrow-clockwise"></i> Start Over
+    </button>
+</div>
+
 
 <!-- Modal for displaying full-size photos -->
 <div class="modal fade" id="photoModal" tabindex="-1" aria-labelledby="photoModalLabel" aria-hidden="true">
@@ -309,6 +320,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // Camera and photo upload functionality
 let stream = null;
 let capturedImageBlob = null;
+let currentFacingMode = 'environment'; // Start with back camera
 
 // Elements
 const openCameraBtn = document.getElementById('openCameraBtn');
@@ -317,6 +329,7 @@ const cameraContainer = document.getElementById('cameraContainer');
 const camera = document.getElementById('camera');
 const canvas = document.getElementById('canvas');
 const captureBtn = document.getElementById('captureBtn');
+const switchCameraBtn = document.getElementById('switchCameraBtn');
 const closeCameraBtn = document.getElementById('closeCameraBtn');
 const previewContainer = document.getElementById('previewContainer');
 const preview = document.getElementById('preview');
@@ -329,23 +342,80 @@ const uploadBtn = document.getElementById('uploadBtn');
 const cancelFileBtn = document.getElementById('cancelFileBtn');
 const buttonContainer = document.getElementById('buttonContainer');
 
+// Function to start camera with specified facing mode
+async function startCamera(facingMode = currentFacingMode) {
+    try {
+        // Stop existing stream if any
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+        }
+        
+        stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+                facingMode: facingMode,
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            } 
+        });
+        camera.srcObject = stream;
+        currentFacingMode = facingMode;
+    } catch (err) {
+        console.error('Error accessing camera:', err);
+        // If the requested camera fails, try the other one
+        if (facingMode === 'environment') {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'user',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    } 
+                });
+                camera.srcObject = stream;
+                currentFacingMode = 'user';
+            } catch (fallbackErr) {
+                throw new Error('Could not access any camera');
+            }
+        } else {
+            throw new Error('Could not access camera');
+        }
+    }
+}
+
 // Open camera
 if (openCameraBtn) {
     openCameraBtn.addEventListener('click', async function() {
         try {
-            stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { 
-                    facingMode: 'environment', // Use back camera by default
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                } 
-            });
-            camera.srcObject = stream;
+            await startCamera();
             cameraContainer.style.display = 'block';
             buttonContainer.style.display = 'none';
         } catch (err) {
             console.error('Error accessing camera:', err);
             alert('Could not access camera. Please check permissions or use the file upload option.');
+        }
+    });
+}
+
+// Switch camera
+if (switchCameraBtn) {
+    switchCameraBtn.addEventListener('click', async function() {
+        const newFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+        
+        // Show loading state
+        switchCameraBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Switching...';
+        switchCameraBtn.disabled = true;
+        
+        try {
+            await startCamera(newFacingMode);
+            // Reset button text
+            switchCameraBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Switch Camera';
+            switchCameraBtn.disabled = false;
+        } catch (err) {
+            console.error('Error switching camera:', err);
+            alert('Could not switch camera. The other camera may not be available.');
+            // Reset button text
+            switchCameraBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Switch Camera';
+            switchCameraBtn.disabled = false;
         }
     });
 }
@@ -470,6 +540,65 @@ if (photo) {
         } else {
             uploadBtn.disabled = true;
         }
+    });
+}
+
+// Start Over functionality with confirmation dialog
+const startOverBtn = document.getElementById('startOverBtn');
+if (startOverBtn) {
+    startOverBtn.addEventListener('click', function() {
+        // Create a custom confirmation dialog
+        const confirmDialog = document.createElement('div');
+        confirmDialog.className = 'modal fade';
+        confirmDialog.id = 'confirmStartOverModal';
+        confirmDialog.setAttribute('tabindex', '-1');
+        confirmDialog.setAttribute('aria-labelledby', 'confirmStartOverModalLabel');
+        confirmDialog.setAttribute('aria-hidden', 'true');
+        
+        confirmDialog.innerHTML = `
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title" id="confirmStartOverModalLabel">
+                            <i class="bi bi-exclamation-triangle"></i> Confirm Start Over
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p><strong>Are you sure you want to start over?</strong></p>
+                        <p>This will reset your progress and you will lose all your found locations and uploaded photos. This action cannot be undone.</p>
+                        <p class="text-muted">Current progress: {{ items_found }} out of {{ items_total }} locations found.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="bi bi-x"></i> Cancel
+                        </button>
+                        <button type="button" class="btn btn-danger" id="confirmStartOverAction">
+                            <i class="bi bi-arrow-clockwise"></i> Yes, Start Over
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Add the modal to the document
+        document.body.appendChild(confirmDialog);
+        
+        // Show the modal
+        const modal = new bootstrap.Modal(confirmDialog);
+        modal.show();
+        
+        // Handle the confirmation action
+        const confirmAction = confirmDialog.querySelector('#confirmStartOverAction');
+        confirmAction.addEventListener('click', function() {
+            // Redirect to reset URL
+            window.location.href = '/?reset=true';
+        });
+        
+        // Clean up modal when it's hidden
+        confirmDialog.addEventListener('hidden.bs.modal', function() {
+            document.body.removeChild(confirmDialog);
+        });
     });
 }
 </script>

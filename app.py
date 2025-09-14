@@ -301,7 +301,9 @@ def add_photo_to_session(session_id, item_id, filename):
 
 @app.route("/")
 def index():
-    reset_session()
+    should_reset = request.args.get("reset", default=False, type=bool)
+    if should_reset:
+        reset_session()
     return redirect("/trail", code=302)
 
 
@@ -311,14 +313,20 @@ def about():
 
 
 def reset_session():
+    """Reset the current session by clearing all found items and generating a new session ID."""
+    # Clear all found items
     for item in app_data["id_dict"]:
         found_id = "found_" + item
         session[found_id] = False
+    
+    # Clear the session ID to force generation of a new one
+    if "id" in session:
+        del session["id"]
 
 
 def initialise_session():
     session.permanent = True
-    app.permanent_session_lifetime = 3600
+    app.permanent_session_lifetime = 24*3600
     if "id" not in session:
         session["id"] = generate_session_id()
     for item in app_data["id_dict"]:
