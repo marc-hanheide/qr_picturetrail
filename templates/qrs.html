@@ -7,7 +7,7 @@
     {% for item in app_data['id_dict'] %}
         <div class="row" >
             <h2>{{ app_data['id_dict'][item]['title'] }}</h2>
-            <p>{{ app_data['id_dict'][item]['text'] }}</p>
+            <p>{{ app_data['id_dict'][item]['text']|safe }}</p>
             {% set image_filename = app_data['id_dict'][item]['image'] + ".jpg" %}
             {% if image_filename|file_exists %}
             <div class="col-md-6">

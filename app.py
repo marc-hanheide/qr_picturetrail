@@ -584,5 +584,124 @@ def gallery():
     )
 
 
+@app.route("/delete-photo", methods=['POST'])
+def delete_photo():
+    """Delete a photo from a session."""
+    is_authenticated, token_provided = check_admin_access()
+    
+    if not is_authenticated:
+        return {"success": False, "message": "Access denied. Admin authentication required."}, 403
+    
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id')
+        filename = data.get('filename')
+        
+        if not session_id or not filename:
+            return {"success": False, "message": "Missing session_id or filename."}, 400
+        
+        # Validate filename to prevent path traversal attacks
+        if '..' in filename or '/' in filename or '\\' in filename:
+            return {"success": False, "message": "Invalid filename."}, 400
+        
+        # Get session directory and file path
+        session_dir = path.join(app_data['upload_folder'], session_id)
+        file_path = path.join(session_dir, filename)
+        
+        # Check if session directory exists
+        if not path.exists(session_dir):
+            return {"success": False, "message": "Session not found."}, 404
+        
+        # Check if file exists
+        if not path.exists(file_path):
+            return {"success": False, "message": "Photo not found."}, 404
+        
+        # Delete the file
+        try:
+            os.remove(file_path)
+        except OSError as e:
+            return {"success": False, "message": f"Failed to delete file: {str(e)}"}, 500
+        
+        # Update session data to remove photo reference
+        session_data = load_session_data(session_id)
+        
+        # Remove from general photos list
+        session_data['photos'] = [photo for photo in session_data.get('photos', []) 
+                                  if photo.get('filename') != filename]
+        
+        # Remove from specific item photos
+        for item_id, item_info in session_data.get('items_found', {}).items():
+            if 'photos' in item_info:
+                item_info['photos'] = [photo for photo in item_info['photos'] 
+                                     if photo != filename]
+        
+        # Save updated session data
+        save_session_data(session_id, session_data)
+        
+        return {"success": True, "message": "Photo deleted successfully."}
+        
+    except Exception as e:
+        print(f"Error deleting photo: {e}")
+        return {"success": False, "message": "An unexpected error occurred."}, 500
+
+
+@app.route("/delete-all-sessions", methods=['POST'])
+def delete_all_sessions():
+    """Delete all sessions and their associated photos."""
+    is_authenticated, token_provided = check_admin_access()
+    
+    if not is_authenticated:
+        return {"success": False, "message": "Access denied. Admin authentication required."}, 403
+    
+    try:
+        upload_folder = app_data['upload_folder']
+        
+        if not path.exists(upload_folder):
+            return {"success": True, "message": "No sessions to delete."}
+        
+        deleted_sessions = 0
+        deleted_files = 0
+        
+        # Get all session directories
+        for item in listdir(upload_folder):
+            session_path = path.join(upload_folder, item)
+            
+            if path.isdir(session_path):
+                try:
+                    # Count files before deletion
+                    files_in_session = 0
+                    for file_item in listdir(session_path):
+                        file_path = path.join(session_path, file_item)
+                        if path.isfile(file_path):
+                            try:
+                                os.remove(file_path)
+                                files_in_session += 1
+                            except OSError as e:
+                                print(f"Error deleting file {file_path}: {e}")
+                    
+                    # Remove the session directory
+                    try:
+                        os.rmdir(session_path)
+                        deleted_sessions += 1
+                        deleted_files += files_in_session
+                    except OSError as e:
+                        print(f"Error removing directory {session_path}: {e}")
+                        
+                except OSError as e:
+                    print(f"Error processing session directory {session_path}: {e}")
+                    continue
+        
+        return {
+            "success": True, 
+            "message": f"Successfully deleted {deleted_sessions} session(s) and {deleted_files} file(s).",
+            "deleted_sessions": deleted_sessions,
+            "deleted_files": deleted_files
+        }
+        
+    except Exception as e:
+        print(f"Error deleting all sessions: {e}")
+        return {"success": False, "message": "An unexpected error occurred during bulk deletion."}, 500
+
+
 if __name__ == "__main__":
     app.run(debug=DEVELOPMENT_ENV, port=5999, host="0.0.0.0")
