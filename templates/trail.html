@@ -1,6 +1,9 @@
 {% extends 'layout.html' %}
 
 {% block body %}
+<!-- QR Scanner Library -->
+<script src="https://unpkg.com/qr-scanner@1.4.2/qr-scanner.umd.min.js"></script>
+
 <!-- Simple navigation -->
 <!-- <nav class="navbar navbar-expand-lg navbar-light bg-light mb-3">
     <div class="container-fluid">
@@ -17,6 +20,44 @@
     <h1>{{ app_data['name'] }}</h1>
     <p class="lead">Welcome to our interactive trail. Find the {{ items_total }} locations.</p>
     <p class="mb-0 text-center">Your unique ID: <strong><code class="text-light">{{ session['id'] }}</code></strong></p>
+</div>
+
+<!-- QR Scanner Section -->
+<div class="card mt-3">
+    <div class="card-header bg-info text-white">
+        <h5><i class="bi bi-qr-code-scan"></i> QR Code Scanner</h5>
+    </div>
+    <div class="card-body">
+        <p>Scan a QR code you found to unlock a location on the trail.</p>
+        
+        <!-- Scanner button -->
+        <div class="mb-3" id="qrScannerButtonContainer">
+            <button type="button" class="btn btn-info" id="openQrScannerBtn">
+                <i class="bi bi-qr-code-scan"></i> Open QR Scanner
+            </button>
+        </div>
+        
+        <!-- QR Scanner video element (hidden initially) -->
+        <div id="qrScannerContainer" style="display: none;" class="mb-3">
+            <div class="text-center mb-2">
+                <small class="text-muted">Point your camera at a QR code</small>
+            </div>
+            <video id="qrScannerVideo" width="100%" height="300" style="border-radius: 8px; border: 2px solid #ddd;"></video>
+            <div class="mt-2">
+                <button type="button" class="btn btn-secondary" id="closeQrScannerBtn">
+                    <i class="bi bi-x"></i> Close Scanner
+                </button>
+                <button type="button" class="btn btn-info ms-2" id="switchQrCameraBtn">
+                    <i class="bi bi-arrow-repeat"></i> Switch Camera
+                </button>
+            </div>
+        </div>
+        
+        <!-- Scanner feedback -->
+        <div id="qrScannerFeedback" style="display: none;" class="alert" role="alert">
+            <!-- Feedback messages will appear here -->
+        </div>
+    </div>
 </div>
 
 <!-- Flash messages for photo upload feedback -->
@@ -255,6 +296,254 @@
 
 
 <script>
+// QR Scanner functionality
+let qrScanner = null;
+let qrCurrentFacingMode = 'environment'; // Start with back camera
+
+// QR Scanner elements
+const openQrScannerBtn = document.getElementById('openQrScannerBtn');
+const qrScannerContainer = document.getElementById('qrScannerContainer');
+const qrScannerVideo = document.getElementById('qrScannerVideo');
+const closeQrScannerBtn = document.getElementById('closeQrScannerBtn');
+const switchQrCameraBtn = document.getElementById('switchQrCameraBtn');
+const qrScannerButtonContainer = document.getElementById('qrScannerButtonContainer');
+const qrScannerFeedback = document.getElementById('qrScannerFeedback');
+
+// Function to show QR scanner feedback
+function showQrFeedback(message, type = 'info') {
+    qrScannerFeedback.className = `alert alert-${type}`;
+    qrScannerFeedback.textContent = message;
+    qrScannerFeedback.style.display = 'block';
+    
+    // Auto-hide after 5 seconds for non-error messages
+    if (type !== 'danger') {
+        setTimeout(() => {
+            qrScannerFeedback.style.display = 'none';
+        }, 5000);
+    }
+}
+
+// Function to validate if URL belongs to current application
+function isValidApplicationUrl(scannedUrl) {
+    try {
+        const scannedUrlObj = new URL(scannedUrl);
+        const currentUrlObj = new URL(window.location.href);
+        
+        // Check if the protocol, hostname, and port match
+        return (
+            scannedUrlObj.protocol === currentUrlObj.protocol &&
+            scannedUrlObj.hostname === currentUrlObj.hostname &&
+            scannedUrlObj.port === currentUrlObj.port
+        );
+    } catch (error) {
+        console.error('Invalid URL:', error);
+        return false;
+    }
+}
+
+// Function to handle QR code detection
+function handleQrResult(result) {
+    const scannedUrl = result.data;
+    
+    // Validate the URL
+    if (!isValidApplicationUrl(scannedUrl)) {
+        showQrFeedback('QR code contains an invalid or external URL. Only QR codes from this application are allowed.', 'warning');
+        return;
+    }
+    
+    // Stop the scanner
+    if (qrScanner) {
+        qrScanner.stop();
+        qrScanner = null;
+    }
+    
+    // Hide scanner UI
+    qrScannerContainer.style.display = 'none';
+    qrScannerButtonContainer.style.display = 'block';
+    
+    // Show success message
+    showQrFeedback('QR code scanned successfully! Redirecting...', 'success');
+    
+    // Redirect to the scanned URL after a short delay
+    setTimeout(() => {
+        window.location.href = scannedUrl;
+    }, 1500);
+}
+
+// Function to start QR scanner
+async function startQrScanner(facingMode = qrCurrentFacingMode) {
+    try {
+        // Get available video devices
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        
+        let scannerOptions = {
+            returnDetailedScanResult: true,
+            highlightScanRegion: true,
+            highlightCodeOutline: true,
+            maxScansPerSecond: 5,
+        };
+        
+        // If specific devices are available, try to use them
+        if (videoDevices.length > 1) {
+            // Try to find specific camera by facing mode
+            const backCamera = videoDevices.find(device => 
+                device.label.toLowerCase().includes('back') || 
+                device.label.toLowerCase().includes('rear') ||
+                device.label.toLowerCase().includes('environment')
+            );
+            const frontCamera = videoDevices.find(device => 
+                device.label.toLowerCase().includes('front') || 
+                device.label.toLowerCase().includes('user') ||
+                device.label.toLowerCase().includes('facing')
+            );
+            
+            if (facingMode === 'environment' && backCamera) {
+                scannerOptions.preferredCamera = backCamera.deviceId;
+            } else if (facingMode === 'user' && frontCamera) {
+                scannerOptions.preferredCamera = frontCamera.deviceId;
+            } else {
+                scannerOptions.preferredCamera = facingMode;
+            }
+        } else {
+            // Fall back to facing mode constraint
+            scannerOptions.preferredCamera = facingMode;
+        }
+        
+        // Initialize QR Scanner
+        qrScanner = new QrScanner(qrScannerVideo, handleQrResult, scannerOptions);
+        
+        // Start scanning
+        await qrScanner.start();
+        qrCurrentFacingMode = facingMode;
+        
+        showQrFeedback('Scanner ready. Point your camera at a QR code.', 'info');
+        
+    } catch (error) {
+        console.error('Error starting QR scanner:', error);
+        
+        // Try alternative camera if the preferred one fails
+        if (facingMode === 'environment') {
+            try {
+                qrScanner = new QrScanner(
+                    qrScannerVideo,
+                    handleQrResult,
+                    {
+                        returnDetailedScanResult: true,
+                        preferredCamera: 'user',
+                        highlightScanRegion: true,
+                        highlightCodeOutline: true,
+                        maxScansPerSecond: 5,
+                    }
+                );
+                await qrScanner.start();
+                qrCurrentFacingMode = 'user';
+                showQrFeedback('Scanner ready with front camera. Point your camera at a QR code.', 'info');
+            } catch (fallbackError) {
+                throw new Error('Could not access any camera');
+            }
+        } else {
+            throw new Error('Could not access camera');
+        }
+    }
+}
+
+// Open QR scanner
+if (openQrScannerBtn) {
+    openQrScannerBtn.addEventListener('click', async function() {
+        try {
+            qrScannerFeedback.style.display = 'none';
+            
+            // Check available cameras first
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            
+            // Hide switch button if only one camera is available
+            if (videoDevices.length < 2) {
+                switchQrCameraBtn.style.display = 'none';
+            } else {
+                switchQrCameraBtn.style.display = 'inline-block';
+            }
+            
+            await startQrScanner();
+            qrScannerContainer.style.display = 'block';
+            qrScannerButtonContainer.style.display = 'none';
+        } catch (error) {
+            console.error('Error accessing camera for QR scanner:', error);
+            showQrFeedback('Could not access camera. Please check permissions and try again.', 'danger');
+        }
+    });
+}
+
+// Close QR scanner
+if (closeQrScannerBtn) {
+    closeQrScannerBtn.addEventListener('click', function() {
+        if (qrScanner) {
+            qrScanner.stop();
+            qrScanner = null;
+        }
+        qrScannerContainer.style.display = 'none';
+        qrScannerButtonContainer.style.display = 'block';
+        qrScannerFeedback.style.display = 'none';
+    });
+}
+
+// Switch QR camera
+if (switchQrCameraBtn) {
+    switchQrCameraBtn.addEventListener('click', async function() {
+        const newFacingMode = qrCurrentFacingMode === 'environment' ? 'user' : 'environment';
+        
+        // Show loading state
+        switchQrCameraBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Switching...';
+        switchQrCameraBtn.disabled = true;
+        
+        try {
+            // Stop current scanner completely
+            if (qrScanner) {
+                await qrScanner.stop();
+                qrScanner.destroy();
+                qrScanner = null;
+            }
+            
+            // Wait a moment for camera to be released
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Check if the desired camera is available
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            
+            if (videoDevices.length < 2) {
+                throw new Error('Only one camera available');
+            }
+            
+            // Try to start with new camera
+            await startQrScanner(newFacingMode);
+            
+            // Reset button
+            switchQrCameraBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Switch Camera';
+            switchQrCameraBtn.disabled = false;
+            
+            showQrFeedback(`Switched to ${newFacingMode === 'environment' ? 'back' : 'front'} camera`, 'success');
+            
+        } catch (error) {
+            console.error('Error switching QR scanner camera:', error);
+            
+            // Try to restart with the original camera
+            try {
+                await startQrScanner(qrCurrentFacingMode);
+                showQrFeedback('Could not switch camera. Only one camera may be available.', 'warning');
+            } catch (restartError) {
+                console.error('Error restarting original camera:', restartError);
+                showQrFeedback('Error switching camera. Please close and reopen the scanner.', 'danger');
+            }
+            
+            // Reset button
+            switchQrCameraBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Switch Camera';
+            switchQrCameraBtn.disabled = false;
+        }
+    });
+}
+
 // Function to show photo in modal
 function showPhotoModal(imageSrc, photoInfo = '') {
     const modalPhoto = document.getElementById('modalPhoto');
@@ -347,6 +636,25 @@ document.addEventListener('DOMContentLoaded', function() {
     {% endif %}
 });
 
+// Cleanup QR scanner when page is unloaded
+window.addEventListener('beforeunload', function() {
+    if (qrScanner) {
+        qrScanner.stop();
+        qrScanner = null;
+    }
+});
+
+// Stop QR scanner when other camera functions are used
+function stopQrScannerIfActive() {
+    if (qrScanner) {
+        qrScanner.stop();
+        qrScanner = null;
+        qrScannerContainer.style.display = 'none';
+        qrScannerButtonContainer.style.display = 'block';
+        qrScannerFeedback.style.display = 'none';
+    }
+}
+
 // Camera and photo upload functionality
 let stream = null;
 let capturedImageBlob = null;
@@ -416,6 +724,9 @@ async function startCamera(facingMode = currentFacingMode) {
 if (openCameraBtn) {
     openCameraBtn.addEventListener('click', async function() {
         try {
+            // Stop QR scanner if active to avoid camera conflicts
+            stopQrScannerIfActive();
+            
             await startCamera();
             cameraContainer.style.display = 'block';
             buttonContainer.style.display = 'none';
