@@ -28,6 +28,19 @@
 
     </main><!-- /.container -->
 
+    <!-- Footer with consent information -->
+    <footer class="bg-light text-muted py-3 mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-12">
+                    <small>
+                        <strong>Data Consent:</strong> {{ app_data['data_consent']|safe }}
+                    </small>
+                </div>
+            </div>
+        </div>
+    </footer>
+
     <!-- Bootstrap core JavaScript
     ================================================== -->
     <!-- Placed at the end of the document so the pages load faster -->

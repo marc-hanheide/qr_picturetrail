@@ -319,6 +319,7 @@ def reset_session():
         found_id = "found_" + item
         session[found_id] = False
     
+    session["consent_given"] = False
     # Clear the session ID to force generation of a new one
     if "id" in session:
         del session["id"]
@@ -329,10 +330,19 @@ def initialise_session():
     app.permanent_session_lifetime = 24*3600
     if "id" not in session:
         session["id"] = generate_session_id()
+    if "consent_given" not in session:
+        session["consent_given"] = False
     for item in app_data["id_dict"]:
         found_id = "found_" + item
         if found_id not in session:
             session[found_id] = False
+
+
+@app.route("/accept-consent", methods=['POST'])
+def accept_consent():
+    initialise_session()
+    session["consent_given"] = True
+    return {"success": True}, 200
 
 
 @app.route("/trail", methods=['GET', 'POST'])

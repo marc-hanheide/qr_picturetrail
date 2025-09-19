@@ -1,5 +1,6 @@
 app_data = {
     "name": "Foundation Year Campus Connect Challenge",
+    "data_consent": "By participating in this challenge, you agree to allow the use of your submitted photos for promotional and educational purposes by the University of Lincoln. Please ensure that all participants in the photos have given their consent. For more information on data protection and privacy, please refer to the <a href=\"https://legal-compliance.lincoln.ac.uk/information-compliance/university-privacy-notices/\" target=\"_blank\">University of Lincoln Privacy Notices</a>.",
     "description": "Get ready to explore your new university surroundings in a fun and interactive way! The Campus Connect Challenge is designed to help you discover key locations across campus while working together with your group.",
     "author": "Marc Hanheide",
     "html_title": "FY Campus Connect Challenge",

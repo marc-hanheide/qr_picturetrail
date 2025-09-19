@@ -229,6 +229,29 @@
     </div>
 </div>
 
+<!-- Consent Modal -->
+<div class="modal fade" id="consentModal" tabindex="-1" aria-labelledby="consentModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="consentModalLabel">
+                    <i class="bi bi-info-circle"></i> Data Consent & Privacy
+                </h5>
+            </div>
+            <div class="modal-body">
+                <div class="consent-content">
+                    {{ app_data['data_consent']|safe }}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-success" id="acceptConsentBtn">
+                    <i class="bi bi-check-circle"></i> I Agree and Accept
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 
 
 <script>
@@ -315,6 +338,13 @@ async function loadSessionPhotos() {
 // Load photos when the page loads
 document.addEventListener('DOMContentLoaded', function() {
     loadSessionPhotos();
+    
+    // Check if consent modal should be shown
+    {% if not session.get('consent_given') %}
+    // Show consent modal on first visit
+    const consentModal = new bootstrap.Modal(document.getElementById('consentModal'));
+    consentModal.show();
+    {% endif %}
 });
 
 // Camera and photo upload functionality
@@ -598,6 +628,40 @@ if (startOverBtn) {
         // Clean up modal when it's hidden
         confirmDialog.addEventListener('hidden.bs.modal', function() {
             document.body.removeChild(confirmDialog);
+        });
+    });
+}
+
+// Consent handling
+const acceptConsentBtn = document.getElementById('acceptConsentBtn');
+if (acceptConsentBtn) {
+    acceptConsentBtn.addEventListener('click', function() {
+        // Show loading state
+        acceptConsentBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Processing...';
+        acceptConsentBtn.disabled = true;
+        
+        // Send consent acceptance to server
+        fetch('/accept-consent', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Hide the modal
+                const consentModal = bootstrap.Modal.getInstance(document.getElementById('consentModal'));
+                consentModal.hide();
+            } else {
+                throw new Error('Failed to save consent');
+            }
+        })
+        .catch(error => {
+            console.error('Error saving consent:', error);
+            alert('There was an error saving your consent. Please try again.');
+            acceptConsentBtn.innerHTML = '<i class="bi bi-check-circle"></i> I Agree and Accept';
+            acceptConsentBtn.disabled = false;
         });
     });
 }
