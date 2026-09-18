@@ -7,10 +7,13 @@ services:
       dockerfile: .devcontainer/Dockerfile
     volumes:
       - .:/app
+    ports:
+      - "5999:5999"
     environment:
       - TRAIL_ADMIN_ACCESS_TOKEN=${TRAIL_ADMIN_ACCESS_TOKEN}
 
   zrok:
+    profiles: [zrok]
     # currently requires the old version as the server hasn't been updated yet
     image: openziti/zrok:1.0.8
     volumes:
