@@ -11,13 +11,17 @@ https://github.com/petersimeth/basic-flask-template
 import re
 import json
 import os
+import queue
+import threading
+import time
+from collections import deque
 from csv import DictWriter
 from datetime import datetime, timezone
 from os import path, listdir, makedirs
 from uuid import uuid4
 
 # Third-party imports
-from flask import Flask, render_template, request, send_file, session, redirect, flash, url_for, make_response
+from flask import Flask, render_template, request, send_file, session, redirect, flash, url_for, make_response, Response, stream_with_context
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from PIL import Image
 from dotenv import load_dotenv
@@ -316,6 +320,183 @@ def add_photo_to_session(session_id, item_id, filename):
     return session_data
 
 
+def upload_url(session_id, filename):
+    """Public URL of an uploaded photo."""
+    abs_path = path.abspath(path.join(app_data['upload_folder'], session_id, filename))
+    # no url_for: also called at startup outside a request context
+    return f"{app.static_url_path}/{path.relpath(abs_path, app.static_folder).replace(os.sep, '/')}"
+
+
+class EventBroker:
+    """Fan-out of server-sent events to all connected /map displays."""
+
+    def __init__(self):
+        self._subscribers = set()
+        self._lock = threading.Lock()
+
+    def subscribe(self):
+        q = queue.Queue(maxsize=200)
+        with self._lock:
+            self._subscribers.add(q)
+        return q
+
+    def unsubscribe(self, q):
+        with self._lock:
+            self._subscribers.discard(q)
+
+    def publish(self, event_type, data):
+        message = f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+        with self._lock:
+            subscribers = list(self._subscribers)
+        for q in subscribers:
+            try:
+                q.put_nowait(message)
+            except queue.Full:
+                pass  # slow client, it resyncs via /map/state on reconnect
+
+
+class StatsTracker:
+    """In-memory engagement statistics, rebuilt from trail.json files at startup."""
+
+    RECENT_WINDOW_S = 3600
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.reload()
+
+    def reload(self):
+        sessions = {}
+        photos = 0
+        latest_photos = {}
+        recent = deque()
+        last_activity = 0.0
+        cutoff = time.time() - self.RECENT_WINDOW_S
+        upload_folder = app_data['upload_folder']
+
+        for session_id in (listdir(upload_folder) if path.isdir(upload_folder) else []):
+            json_path = get_session_json_path(session_id)
+            if not path.isfile(json_path):
+                continue
+            try:
+                with open(json_path) as f:
+                    data = json.load(f)
+            except (json.JSONDecodeError, IOError):
+                continue
+
+            found = {i for i in data.get('items_found', {}) if i in app_data['id_dict']}
+            if found:
+                sessions[session_id] = found
+            for item_id in found:
+                ts = self._epoch(data['items_found'][item_id].get('found_at'))
+                last_activity = max(last_activity, ts)
+                if ts >= cutoff:
+                    recent.append(ts)
+
+            for photo in data.get('photos', []):
+                item_id = photo.get('item_id')
+                filename = photo.get('filename', '')
+                if item_id not in app_data['id_dict'] or not path.isfile(path.join(upload_folder, session_id, filename)):
+                    continue
+                photos += 1
+                ts = self._epoch(photo.get('uploaded_at'))
+                last_activity = max(last_activity, ts)
+                if item_id not in latest_photos or ts > latest_photos[item_id]['epoch']:
+                    latest_photos[item_id] = {'url': upload_url(session_id, filename), 'ts': photo.get('uploaded_at'), 'epoch': ts}
+
+        with self._lock:
+            self._sessions = sessions
+            self._photos = photos
+            self._latest_photos = latest_photos
+            self._recent = deque(sorted(recent))
+            self._last_activity = last_activity or None
+
+    @staticmethod
+    def _epoch(iso_ts):
+        try:
+            return datetime.fromisoformat(iso_ts).timestamp()
+        except (TypeError, ValueError):
+            return 0.0
+
+    def record_checkin(self, session_id, item_id):
+        """Returns True if this session had not found this place before."""
+        now = time.time()
+        with self._lock:
+            found = self._sessions.setdefault(session_id, set())
+            self._last_activity = now
+            if item_id in found:
+                return False
+            found.add(item_id)
+            self._recent.append(now)
+            return True
+
+    def record_photo(self, item_id, url):
+        now = time.time()
+        ts = datetime.fromtimestamp(now, timezone.utc).isoformat()
+        with self._lock:
+            self._photos += 1
+            self._last_activity = now
+            self._latest_photos[item_id] = {'url': url, 'ts': ts, 'epoch': now}
+        return {'item_id': item_id, 'url': url, 'ts': ts}
+
+    def latest_photos(self):
+        with self._lock:
+            return {k: {'url': v['url'], 'ts': v['ts']} for k, v in self._latest_photos.items()}
+
+    def snapshot(self):
+        total_items = len(app_data['id_dict'])
+        cutoff = time.time() - self.RECENT_WINDOW_S
+        with self._lock:
+            while self._recent and self._recent[0] < cutoff:
+                self._recent.popleft()
+            per_place = {item_id: 0 for item_id in app_data['id_dict']}
+            for found in self._sessions.values():
+                for item_id in found:
+                    per_place[item_id] += 1
+            return {
+                'sessions': sum(1 for found in self._sessions.values() if found),
+                'checkins': sum(per_place.values()),
+                'completed': sum(1 for found in self._sessions.values() if len(found) >= total_items),
+                'photos': self._photos,
+                'total_places': total_items,
+                'per_place': per_place,
+                'recent_checkins': list(self._recent),
+                'last_activity': self._last_activity,
+            }
+
+
+event_broker = EventBroker()
+stats_tracker = StatsTracker()
+
+DEFAULT_PROXIMITY = {
+    "update_interval_s": 5,
+    "hysteresis_m": 8,
+    "far_text": "{distance} away",
+    "tiers": [],
+}
+
+
+def get_proximity_config():
+    return {**DEFAULT_PROXIMITY, **app_data.get("proximity", {})}
+
+
+def get_map_places():
+    """Places that have GPS coordinates, in id_dict order."""
+    places = []
+    for item_id, item in app_data['id_dict'].items():
+        if 'lat' not in item or 'lon' not in item:
+            continue
+        icon = item['image'] + '.jpg'
+        places.append({
+            'id': item_id,
+            'title': item['title'],
+            'lat': item['lat'],
+            'lon': item['lon'],
+            'photo_side': item.get('photo_side', 'top'),
+            'icon': url_for('static', filename=icon) if path.exists(path.join(app.static_folder, icon)) else None,
+        })
+    return places
+
+
 @app.route("/")
 def index():
     should_reset = request.args.get("reset", default=False, type=bool)
@@ -389,6 +570,10 @@ def trail():
             
             # Update session data with photo
             add_photo_to_session(session["id"], item_id, filename)
+            event_broker.publish("photo", stats_tracker.record_photo(item_id, upload_url(session["id"], filename)))
+            event_broker.publish("stats", stats_tracker.snapshot())
+            # the redirect back to ?id= must not count as another check-in on the map
+            session["just_uploaded"] = True
             
             flash('Photo uploaded successfully!', 'success')
         else:
@@ -404,6 +589,11 @@ def trail():
         # Update session data with found item
         item_name = app_data["id_dict"][id]["image"]
         update_session_with_item(session["id"], id, item_name)
+
+        if not session.pop("just_uploaded", False):
+            is_new = stats_tracker.record_checkin(session["id"], id)
+            event_broker.publish("checkin", {"item_id": id, "new": is_new})
+            event_broker.publish("stats", stats_tracker.snapshot())
     
     items_found = 0
     for item in app_data["id_dict"]:
@@ -438,6 +628,7 @@ def trail():
         found=id,
         items_found=items_found,
         items_total=items_total,
+        proximity=get_proximity_config(),
     )
 
 
@@ -487,6 +678,66 @@ def qrs():
     
     return render_template(
         "qrs.html", app_data=app_data, base_url=get_base_url(request)
+    )
+
+
+@app.route("/map")
+def live_map():
+    is_authenticated, token_provided = check_admin_access()
+
+    if not is_authenticated:
+        return "Access denied. Valid admin token required.", 403
+
+    if token_provided:
+        response = make_response(redirect(url_for('live_map')))
+        return set_admin_auth_cookie(response)
+
+    if "map" not in app_data or not get_map_places():
+        return "Map not configured. Add a 'map' block and lat/lon for each place to the trail config.", 404
+
+    return render_template(
+        "map.html",
+        app_data=app_data,
+        map_config=app_data["map"],
+        mapbox_token=os.environ.get("MAPBOX_TOKEN", ""),
+    )
+
+
+@app.route("/map/state")
+def map_state():
+    is_authenticated, _ = check_admin_access()
+    if not is_authenticated:
+        return {"error": "Access denied."}, 403
+
+    return {
+        "places": get_map_places(),
+        "photos": stats_tracker.latest_photos(),
+        "stats": stats_tracker.snapshot(),
+    }
+
+
+@app.route("/map/events")
+def map_events():
+    is_authenticated, _ = check_admin_access()
+    if not is_authenticated:
+        return {"error": "Access denied."}, 403
+
+    def stream():
+        q = event_broker.subscribe()
+        try:
+            yield "retry: 3000\n\n"
+            while True:
+                try:
+                    yield q.get(timeout=15)
+                except queue.Empty:
+                    yield ": keep-alive\n\n"
+        finally:
+            event_broker.unsubscribe(q)
+
+    return Response(
+        stream_with_context(stream()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
@@ -672,6 +923,8 @@ def delete_photo():
         
         # Save updated session data
         save_session_data(session_id, session_data)
+        stats_tracker.reload()
+        event_broker.publish("reset", {})
         
         return {"success": True, "message": "Photo deleted successfully."}
         
@@ -725,6 +978,9 @@ def delete_all_sessions():
                 except OSError as e:
                     print(f"Error processing session directory {session_path}: {e}")
                     continue
+
+        stats_tracker.reload()
+        event_broker.publish("reset", {})
         
         return {
             "success": True, 

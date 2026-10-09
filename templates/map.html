@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ app_data['html_title'] }} | Live Map</title>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
+<style>
+:root {
+    --gold: #ffd76a;
+    --gold-soft: rgba(255, 215, 106, 0.55);
+    --sky: #7cc8ff;
+    --panel-bg: rgba(14, 18, 32, 0.62);
+    --panel-border: rgba(255, 255, 255, 0.12);
+    --text: #f4f6fb;
+    --muted: rgba(244, 246, 251, 0.62);
+    --photo-size: 120px;
+}
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e17; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); }
+body.idle, body.idle * { cursor: none !important; }
+#map { position: absolute; inset: 0; }
+
+/* ---------- place markers ---------- */
+.place { position: absolute; width: 44px; height: 44px; }
+.place .dot {
+    position: absolute; inset: 0; border-radius: 50%;
+    background: radial-gradient(circle, #fff6d5 0%, var(--gold) 55%, #e8a93a 100%);
+    background-size: cover; background-position: center;
+    border: 3px solid var(--gold);
+    box-shadow: 0 0 14px 4px var(--gold-soft), 0 0 40px 10px rgba(255, 200, 80, 0.18);
+    animation: breathe 3.2s ease-in-out infinite;
+    z-index: 2;
+}
+.place.flash .dot { animation: dotFlash 0.9s ease-out, breathe 3.2s ease-in-out 0.9s infinite; }
+.place .ring {
+    position: absolute; inset: 0; border-radius: 50%;
+    border: 3px solid var(--gold);
+    box-shadow: 0 0 18px var(--gold-soft), inset 0 0 12px var(--gold-soft);
+    animation: ringOut 1.9s cubic-bezier(0.2, 0.6, 0.3, 1) forwards;
+    pointer-events: none; z-index: 1;
+}
+.place .label {
+    position: absolute; top: 52px; left: 50%; translate: -50% 0;
+    white-space: nowrap; font-size: 14px; font-weight: 600; letter-spacing: 0.02em;
+    padding: 3px 10px; border-radius: 999px;
+    background: rgba(10, 12, 22, 0.6); border: 1px solid var(--panel-border);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    display: flex; gap: 6px; align-items: center;
+}
+.place .label .count {
+    font-size: 12px; min-width: 18px; text-align: center; padding: 0 6px; border-radius: 999px;
+    background: var(--gold); color: #2a1f00; font-weight: 700;
+}
+.place .label .count:empty { display: none; }
+
+/* ---------- photo frames ---------- */
+.photo-frame {
+    position: absolute; width: var(--photo-size); height: var(--photo-size);
+    padding: 6px; box-sizing: border-box; border-radius: 8px; background: #fff;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 26px rgba(255, 215, 106, 0.35);
+    rotate: var(--tilt, 0deg);
+    opacity: 0; transform: scale(0.4); transition: opacity 0.4s, transform 0.5s cubic-bezier(0.3, 1.6, 0.5, 1);
+    pointer-events: none;
+}
+.photo-frame.has-photo { opacity: 1; transform: scale(1); }
+.photo-frame.pop { animation: framePop 2.2s ease-out; }
+.photo-frame.side-top    { bottom: 34px; left: 50%; translate: -50% 0; }
+.photo-frame.side-bottom { top: 80px;    left: 50%; translate: -50% 0; }
+.photo-frame.side-left   { right: 34px;  top: 50%;  translate: 0 -50%; }
+.photo-frame.side-right  { left: 34px;   top: 50%;  translate: 0 -50%; }
+.photo-frame .photo {
+    position: absolute; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px);
+    object-fit: cover; border-radius: 4px;
+}
+.photo-frame .photo.enter { animation: photoIn 1.15s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+.photo-frame .photo.leaving { animation: photoOut 0.9s ease-in forwards; }
+.burst {
+    position: absolute; inset: -60%; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.95) 0%, rgba(255, 215, 106, 0.55) 28%, transparent 65%);
+    animation: burst 1s ease-out forwards;
+}
+.spark {
+    position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px; border-radius: 50%;
+    background: #fff3c4; box-shadow: 0 0 10px 3px var(--gold);
+    animation: sparkFly 1.3s cubic-bezier(0.1, 0.7, 0.3, 1) forwards; pointer-events: none;
+}
+
+@keyframes breathe { 0%, 100% { box-shadow: 0 0 14px 4px var(--gold-soft), 0 0 40px 10px rgba(255, 200, 80, 0.15); } 50% { box-shadow: 0 0 20px 7px var(--gold-soft), 0 0 60px 18px rgba(255, 200, 80, 0.28); } }
+@keyframes dotFlash { 0% { transform: scale(1); filter: brightness(1); } 25% { transform: scale(1.45); filter: brightness(2.2); } 100% { transform: scale(1); filter: brightness(1); } }
+@keyframes ringOut { 0% { transform: scale(1); opacity: 0.95; } 100% { transform: scale(6); opacity: 0; border-width: 1px; } }
+@keyframes photoIn {
+    0%   { opacity: 0; transform: scale(0.15) rotate(-25deg); filter: brightness(3) blur(6px); }
+    55%  { opacity: 1; transform: scale(1.12) rotate(4deg);   filter: brightness(1.5) blur(0); }
+    78%  { transform: scale(0.96) rotate(-1.5deg); filter: brightness(1.1); }
+    100% { transform: scale(1) rotate(0); filter: none; }
+}
+@keyframes photoOut { to { opacity: 0; transform: scale(0.85); filter: blur(3px); } }
+@keyframes framePop {
+    0%   { box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 26px rgba(255, 215, 106, 0.35); }
+    20%  { box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 70px 20px rgba(255, 225, 140, 0.9); }
+    100% { box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 26px rgba(255, 215, 106, 0.35); }
+}
+@keyframes burst { 0% { transform: scale(0.2); opacity: 1; } 100% { transform: scale(1.5); opacity: 0; } }
+@keyframes sparkFly { 0% { transform: translate(0, 0) scale(1.2); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) scale(0); opacity: 0; } }
+
+/* ---------- statistics panel ---------- */
+#stats {
+    position: absolute; top: 24px; bottom: 24px; width: 360px; box-sizing: border-box;
+    padding: 22px 22px 18px; border-radius: 22px;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+    display: flex; flex-direction: column; gap: 18px; overflow: hidden; z-index: 10;
+}
+#stats.right { right: 24px; }
+#stats.left { left: 24px; }
+#stats header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+#stats h1 { font-size: 19px; line-height: 1.25; margin: 0; font-weight: 700; }
+#stats h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+.live { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; color: var(--muted); }
+.live .led { width: 9px; height: 9px; border-radius: 50%; background: #e05757; }
+.live.on { color: #8ff0a4; }
+.live.on .led { background: #4be070; box-shadow: 0 0 8px #4be070; animation: blink 2s infinite; }
+@keyframes blink { 50% { opacity: 0.35; } }
+
+.counters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.counter { text-align: center; padding: 12px 4px 10px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.06); transition: background 0.6s, box-shadow 0.6s; }
+.counter .value { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--gold); text-shadow: 0 0 18px rgba(255, 215, 106, 0.35); }
+.counter .name { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.counter.bump { background: rgba(255, 215, 106, 0.18); box-shadow: 0 0 22px rgba(255, 215, 106, 0.35); transition: none; }
+
+.completion { display: flex; align-items: center; gap: 16px; }
+.completion svg { flex: 0 0 auto; }
+.completion .ring-bg { stroke: rgba(255, 255, 255, 0.1); }
+.completion .ring-fg { transition: stroke-dashoffset 1.4s cubic-bezier(0.3, 0.8, 0.3, 1); filter: drop-shadow(0 0 6px rgba(255, 215, 106, 0.6)); }
+.completion .pct { font-size: 20px; font-weight: 800; fill: var(--text); }
+.completion .big { font-size: 26px; font-weight: 800; color: var(--gold); }
+.completion .sub { font-size: 13px; color: var(--muted); }
+
+.popular { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+#popularList { position: relative; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.prow { display: grid; grid-template-columns: 30px 1fr 34px; gap: 10px; align-items: center; }
+.prow .icon { width: 30px; height: 30px; border-radius: 50%; background: radial-gradient(circle, #fff6d5, var(--gold)) center/cover; border: 2px solid var(--gold); }
+.prow .title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prow .bar { height: 6px; margin-top: 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.prow .fill { height: 100%; width: 0; border-radius: 3px; background: linear-gradient(90deg, #ffb347, var(--gold)); transition: width 1.2s cubic-bezier(0.3, 0.8, 0.3, 1); }
+.prow:first-child .fill { background: linear-gradient(90deg, #ffb347, #fff1b8, var(--gold)); background-size: 200% 100%; animation: shimmer 2.5s linear infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.prow .num { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.activity svg { width: 100%; height: 54px; display: block; }
+.activity .line { fill: none; stroke: var(--sky); stroke-width: 2; stroke-linejoin: round; filter: drop-shadow(0 0 4px rgba(124, 200, 255, 0.7)); }
+.activity .foot { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+/* ---------- toasts ---------- */
+#toasts { position: absolute; bottom: 28px; display: flex; flex-direction: column-reverse; gap: 10px; z-index: 10; pointer-events: none; }
+#toasts.left { left: 28px; }
+#toasts.right { right: 28px; }
+.toast {
+    padding: 12px 18px; border-radius: 14px; font-size: 16px; font-weight: 600;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    animation: toastIn 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.toast.out { animation: toastOut 0.6s ease-in forwards; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(20px) scale(0.9); } }
+@keyframes toastOut { to { opacity: 0; transform: translateY(-10px); } }
+
+#fsBtn { background: none; border: 1px solid var(--panel-border); color: var(--muted); border-radius: 8px; padding: 2px 8px; cursor: pointer; font-size: 14px; }
+#config-error { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; font-size: 20px; z-index: 20; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="config-error">No Mapbox token configured. Set MAPBOX_TOKEN in the environment.</div>
+
+<aside id="stats">
+    <header>
+        <h1>{{ app_data['name'] }}</h1>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
+            <div class="live" id="live"><span class="led"></span>LIVE</div>
+            <button id="fsBtn" title="Full screen (F)">&#x26F6;</button>
+        </div>
+    </header>
+
+    <section class="counters">
+        <div class="counter" id="c-sessions"><div class="value">0</div><div class="name">explorers</div></div>
+        <div class="counter" id="c-checkins"><div class="value">0</div><div class="name">places found</div></div>
+        <div class="counter" id="c-photos"><div class="value">0</div><div class="name">photos</div></div>
+    </section>
+
+    <section class="completion">
+        <svg width="110" height="110" viewBox="0 0 110 110">
+            <defs>
+                <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#fff1b8"/><stop offset="100%" stop-color="#ffb347"/>
+                </linearGradient>
+            </defs>
+            <circle class="ring-bg" cx="55" cy="55" r="46" fill="none" stroke-width="10"/>
+            <circle class="ring-fg" id="ringFg" cx="55" cy="55" r="46" fill="none" stroke="url(#ringGrad)" stroke-width="10"
+                    stroke-linecap="round" transform="rotate(-90 55 55)" stroke-dasharray="289.03" stroke-dashoffset="289.03"/>
+            <text class="pct" id="ringPct" x="55" y="62" text-anchor="middle">0%</text>
+        </svg>
+        <div>
+            <div class="big">🏆 <span id="completedNum">0</span></div>
+            <div class="sub">completed the whole trail</div>
+        </div>
+    </section>
+
+    <section class="popular">
+        <h2>Most popular places</h2>
+        <div id="popularList"></div>
+    </section>
+
+    <section class="activity">
+        <h2>Check-ins, last hour</h2>
+        <svg viewBox="0 0 240 54" preserveAspectRatio="none">
+            <defs>
+                <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="rgba(124,200,255,0.45)"/><stop offset="100%" stop-color="rgba(124,200,255,0)"/>
+                </linearGradient>
+            </defs>
+            <path id="sparkArea" fill="url(#areaGrad)" d=""/>
+            <polyline id="sparkLine" class="line" points=""/>
+        </svg>
+        <div class="foot"><span>60 min ago</span><span id="lastActivity">no activity yet</span></div>
+    </section>
+</aside>
+
+<div id="toasts"></div>
+
+<script>
+const CFG = {{ map_config|tojson }};
+const TOKEN = {{ mapbox_token|tojson }};
+const STATE_URL = {{ url_for('map_state')|tojson }};
+const EVENTS_URL = {{ url_for('map_events')|tojson }};
+const SIDES = ['top', 'bottom', 'left', 'right'];
+const panelSide = CFG.stats_position === 'left' ? 'left' : 'right';
+const toastSide = panelSide === 'left' ? 'right' : 'left';
+
+document.documentElement.style.setProperty('--photo-size', (CFG.photo_size || 120) + 'px');
+document.getElementById('stats').classList.add(panelSide);
+document.getElementById('toasts').classList.add(toastSide);
+
+const places = {};   // id -> {data, el, frame, countEl, photoUrl}
+let placeOrder = [];
+let lastStats = null;
+let zTop = 10;
+
+// ---------- map ----------
+if (!TOKEN) document.getElementById('config-error').style.display = 'flex';
+mapboxgl.accessToken = TOKEN;
+const map = new mapboxgl.Map({
+    container: 'map',
+    style: CFG.style || 'mapbox://styles/mapbox/light-v11',
+    center: CFG.center || [0, 0],
+    zoom: CFG.zoom || 16,
+    pitch: CFG.pitch || 0,
+    bearing: CFG.bearing || 0,
+    doubleClickZoom: false,
+});
+
+map.on('style.load', () => {
+    if (CFG.label_opacity == null) return;
+    for (const layer of map.getStyle().layers) {
+        if (layer.type !== 'symbol') continue;
+        try {
+            map.setPaintProperty(layer.id, 'text-opacity', CFG.label_opacity);
+            map.setPaintProperty(layer.id, 'icon-opacity', CFG.label_opacity);
+        } catch (e) { /* some layers do not support these properties */ }
+    }
+});
+
+function fitView() {
+    const padding = { top: 90, bottom: 90, left: 90, right: 90 };
+    padding[panelSide] = 360 + 24 + 60;
+    let bounds = CFG.bounds;
+    if (!bounds && placeOrder.length) {
+        const b = new mapboxgl.LngLatBounds();
+        placeOrder.forEach(id => b.extend([places[id].data.lon, places[id].data.lat]));
+        bounds = b;
+    }
+    if (bounds) map.fitBounds(bounds, { padding, duration: 0, pitch: CFG.pitch || 0, bearing: CFG.bearing || 0 });
+}
+window.addEventListener('resize', () => setTimeout(fitView, 200));
+
+function bringToFront(id) {
+    places[id].el.style.zIndex = ++zTop;
+}
+
+function buildMarker(p) {
+    const el = document.createElement('div');
+    el.className = 'place';
+    const side = SIDES.includes(p.photo_side) ? p.photo_side : 'top';
+
+    const frame = document.createElement('div');
+    frame.className = 'photo-frame side-' + side;
+    frame.style.setProperty('--tilt', (Math.random() * 8 - 4).toFixed(1) + 'deg');
+
+    const dot = document.createElement('div');
+    dot.className = 'dot';
+    if (p.icon) dot.style.backgroundImage = `url("${p.icon}")`;
+
+    const label = document.createElement('div');
+    label.className = 'label';
+    const title = document.createElement('span');
+    title.textContent = p.title;
+    const countEl = document.createElement('span');
+    countEl.className = 'count';
+    label.append(title, countEl);
+
+    el.append(frame, dot, label);
+    new mapboxgl.Marker({ element: el, anchor: 'center' }).setLngLat([p.lon, p.lat]).addTo(map);
+    places[p.id] = { data: p, el, frame, countEl, photoUrl: null };
+}
+
+// ---------- animations ----------
+function pulse(id) {
+    const place = places[id];
+    if (!place) return;
+    bringToFront(id);
+    for (let i = 0; i < 3; i++) {
+        const ring = document.createElement('span');
+        ring.className = 'ring';
+        ring.style.animationDelay = (i * 0.45) + 's';
+        ring.addEventListener('animationend', () => ring.remove());
+        place.el.appendChild(ring);
+    }
+    place.el.classList.remove('flash');
+    void place.el.offsetWidth;
+    place.el.classList.add('flash');
+}
+
+function burst(frame) {
+    const flash = document.createElement('div');
+    flash.className = 'burst';
+    flash.addEventListener('animationend', () => flash.remove());
+    frame.appendChild(flash);
+    for (let i = 0; i < 14; i++) {
+        const spark = document.createElement('span');
+        spark.className = 'spark';
+        const angle = (i / 14) * Math.PI * 2 + Math.random() * 0.4;
+        const dist = 80 + Math.random() * 70;
+        spark.style.setProperty('--dx', (Math.cos(angle) * dist).toFixed(0) + 'px');
+        spark.style.setProperty('--dy', (Math.sin(angle) * dist).toFixed(0) + 'px');
+        spark.style.animationDelay = (Math.random() * 0.15).toFixed(2) + 's';
+        spark.addEventListener('animationend', () => spark.remove());
+        frame.appendChild(spark);
+    }
+    frame.classList.remove('pop');
+    void frame.offsetWidth;
+    frame.classList.add('pop');
+}
+
+function showPhoto(id, url, animate = true) {
+    const place = places[id];
+    if (!place || place.photoUrl === url) return;
+    place.photoUrl = url;
+    const img = new Image();
+    img.className = 'photo' + (animate ? ' enter' : '');
+    img.alt = '';
+    img.onload = () => {
+        if (place.photoUrl !== url) return;  // superseded while loading
+        place.frame.querySelectorAll('.photo:not(.leaving)').forEach(old => {
+            old.classList.add('leaving');
+            old.addEventListener('animationend', () => old.remove());
+        });
+        place.frame.appendChild(img);
+        place.frame.classList.add('has-photo');
+        if (animate) {
+            bringToFront(id);
+            burst(place.frame);
+        }
+    };
+    img.src = url;
+}
+
+function clearPhoto(id) {
+    const place = places[id];
+    place.photoUrl = null;
+    place.frame.classList.remove('has-photo');
+    setTimeout(() => { if (!place.photoUrl) place.frame.querySelectorAll('.photo').forEach(p => p.remove()); }, 500);
+}
+
+function toast(text) {
+    const box = document.getElementById('toasts');
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.textContent = text;
+    box.appendChild(t);
+    while (box.children.length > 4) box.firstElementChild.remove();
+    setTimeout(() => {
+        t.classList.add('out');
+        t.addEventListener('animationend', () => t.remove());
+    }, 6000);
+}
+
+// ---------- statistics ----------
+function animateNumber(counterId, target) {
+    const box = document.getElementById(counterId);
+    const el = box.querySelector('.value');
+    const start = Number(el.dataset.value || 0);
+    el.dataset.value = target;
+    if (start === target) return;
+    box.classList.add('bump');
+    setTimeout(() => box.classList.remove('bump'), 50);
+    const t0 = performance.now();
+    const dur = 900;
+    const step = now => {
+        const k = Math.min(1, (now - t0) / dur);
+        const eased = 1 - Math.pow(1 - k, 3);
+        el.textContent = Math.round(start + (target - start) * eased).toLocaleString('en-GB');
+        if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+}
+
+function buildPopularRows() {
+    const list = document.getElementById('popularList');
+    list.innerHTML = '';
+    placeOrder.forEach(id => {
+        const p = places[id].data;
+        const row = document.createElement('div');
+        row.className = 'prow';
+        row.dataset.id = id;
+        const icon = document.createElement('div');
+        icon.className = 'icon';
+        if (p.icon) icon.style.backgroundImage = `url("${p.icon}")`;
+        const mid = document.createElement('div');
+        const title = document.createElement('div');
+        title.className = 'title';
+        title.textContent = p.title;
+        const bar = document.createElement('div');
+        bar.className = 'bar';
+        bar.innerHTML = '<div class="fill"></div>';
+        mid.append(title, bar);
+        const num = document.createElement('div');
+        num.className = 'num';
+        num.textContent = '0';
+        row.append(icon, mid, num);
+        row.addEventListener('mouseenter', () => pulse(id));
+        list.appendChild(row);
+    });
+}
+
+function renderPopular(perPlace) {
+    const list = document.getElementById('popularList');
+    const rows = [...list.children];
+    const max = Math.max(1, ...Object.values(perPlace));
+    const before = new Map(rows.map(r => [r, r.getBoundingClientRect().top]));
+
+    rows.forEach(r => {
+        const n = perPlace[r.dataset.id] || 0;
+        r.querySelector('.num').textContent = n;
+        r.querySelector('.fill').style.width = (100 * n / max) + '%';
+    });
+    rows.sort((a, b) => (perPlace[b.dataset.id] || 0) - (perPlace[a.dataset.id] || 0)
+        || placeOrder.indexOf(a.dataset.id) - placeOrder.indexOf(b.dataset.id));
+    rows.forEach(r => list.appendChild(r));
+
+    rows.forEach(r => {
+        const dy = before.get(r) - r.getBoundingClientRect().top;
+        if (!dy) return;
+        r.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }],
+                  { duration: 700, easing: 'cubic-bezier(0.3, 0.8, 0.3, 1)' });
+    });
+}
+
+function renderSparkline() {
+    if (!lastStats) return;
+    const buckets = new Array(12).fill(0);
+    const now = Date.now() / 1000;
+    lastStats.recent_checkins.forEach(ts => {
+        const idx = 11 - Math.floor((now - ts) / 300);
+        if (idx >= 0 && idx < 12) buckets[idx]++;
+    });
+    const max = Math.max(1, ...buckets);
+    const pts = buckets.map((v, i) => [(i / 11) * 240, 50 - (v / max) * 44]);
+    const line = pts.map(p => p.map(n => n.toFixed(1)).join(',')).join(' ');
+    document.getElementById('sparkLine').setAttribute('points', line);
+    document.getElementById('sparkArea').setAttribute('d', `M0,54 L${line.replace(/ /g, ' L')} L240,54 Z`);
+}
+
+function renderLastActivity() {
+    const el = document.getElementById('lastActivity');
+    if (!lastStats || !lastStats.last_activity) { el.textContent = 'no activity yet'; return; }
+    const s = Math.max(0, Math.round(Date.now() / 1000 - lastStats.last_activity));
+    el.textContent = s < 10 ? 'last activity just now'
+        : s < 60 ? `last activity ${s} s ago`
+        : s < 3600 ? `last activity ${Math.floor(s / 60)} min ago`
+        : `last activity ${Math.floor(s / 3600)} h ago`;
+}
+
+function renderStats(stats) {
+    lastStats = stats;
+    animateNumber('c-sessions', stats.sessions);
+    animateNumber('c-checkins', stats.checkins);
+    animateNumber('c-photos', stats.photos);
+
+    const pct = stats.sessions ? stats.completed / stats.sessions : 0;
+    const circ = 2 * Math.PI * 46;
+    document.getElementById('ringFg').setAttribute('stroke-dashoffset', (circ * (1 - pct)).toFixed(2));
+    document.getElementById('ringPct').textContent = Math.round(pct * 100) + '%';
+    document.getElementById('completedNum').textContent = stats.completed.toLocaleString('en-GB');
+
+    for (const [id, n] of Object.entries(stats.per_place)) {
+        if (places[id]) places[id].countEl.textContent = n ? n : '';
+    }
+    renderPopular(stats.per_place);
+    renderSparkline();
+    renderLastActivity();
+}
+setInterval(renderLastActivity, 1000);
+setInterval(renderSparkline, 30000);
+
+// ---------- state and live events ----------
+async function loadState(initial) {
+    const res = await fetch(STATE_URL, { credentials: 'same-origin' });
+    if (!res.ok) throw new Error('state request failed: ' + res.status);
+    const state = await res.json();
+
+    if (initial) {
+        state.places.forEach(buildMarker);
+        placeOrder = state.places.map(p => p.id);
+        buildPopularRows();
+        fitView();
+    }
+    let delay = 0;
+    placeOrder.forEach(id => {
+        const photo = state.photos[id];
+        if (photo) {
+            if (initial) { setTimeout(() => showPhoto(id, photo.url, true), delay); delay += 450; }
+            else showPhoto(id, photo.url, true);
+        } else if (places[id].photoUrl) {
+            clearPhoto(id);
+        }
+    });
+    renderStats(state.stats);
+}
+
+let needsResync = false;
+function connect() {
+    const es = new EventSource(EVENTS_URL);
+    const live = document.getElementById('live');
+    es.onopen = () => {
+        live.classList.add('on');
+        if (needsResync) { needsResync = false; loadState(false).catch(console.error); }
+    };
+    es.onerror = () => {
+        live.classList.remove('on');
+        needsResync = true;
+        if (es.readyState === EventSource.CLOSED) setTimeout(connect, 5000);
+    };
+    es.addEventListener('checkin', e => {
+        const d = JSON.parse(e.data);
+        if (!places[d.item_id]) return;
+        pulse(d.item_id);
+        if (d.new) toast(`✨ Someone just found ${places[d.item_id].data.title}!`);
+    });
+    es.addEventListener('photo', e => {
+        const d = JSON.parse(e.data);
+        if (!places[d.item_id]) return;
+        showPhoto(d.item_id, d.url, true);
+        toast(`📸 New photo at ${places[d.item_id].data.title}!`);
+    });
+    es.addEventListener('stats', e => renderStats(JSON.parse(e.data)));
+    es.addEventListener('reset', () => loadState(false).catch(console.error));
+}
+
+loadState(true).then(connect).catch(err => {
+    console.error(err);
+    setTimeout(() => location.reload(), 10000);
+});
+
+// ---------- kiosk helpers ----------
+function toggleFullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+}
+document.getElementById('fsBtn').addEventListener('click', toggleFullscreen);
+document.addEventListener('keydown', e => { if (e.key === 'f' || e.key === 'F') toggleFullscreen(); });
+
+let idleTimer;
+document.addEventListener('mousemove', () => {
+    document.body.classList.remove('idle');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => document.body.classList.add('idle'), 3000);
+});
+
+async function keepAwake() {
+    try { if ('wakeLock' in navigator && document.visibilityState === 'visible') await navigator.wakeLock.request('screen'); } catch (e) { /* not supported or denied */ }
+}
+keepAwake();
+document.addEventListener('visibilitychange', keepAwake);
+</script>
+</body>
+</html>

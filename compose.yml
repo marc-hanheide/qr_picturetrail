@@ -12,6 +12,7 @@ services:
     environment:
       - TRAIL_ADMIN_ACCESS_TOKEN=${TRAIL_ADMIN_ACCESS_TOKEN}
       - TRAIL_CONFIG=${TRAIL_CONFIG:-config.py}
+      - MAPBOX_TOKEN=${MAPBOX_TOKEN}
 
 #   zrok:
 #     profiles: [zrok]

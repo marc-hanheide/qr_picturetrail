@@ -10,12 +10,20 @@ A simple Flask web app for a QR code picture trail. Participants scan QR codes p
 - **Admin pages** (token protected):
   - `/qrs`: printable QR codes for all trail items.
   - `/gallery`: paginated gallery of all sessions and photos, with options to delete single photos or all sessions.
+  - `/map`: full-screen live map (Mapbox) of all places. Every QR scan sends an expanding ring from its place, every uploaded photo pops up at its place, and a statistics panel shows explorers, places found, photos, completed trails, the most popular places and recent activity. Updates arrive via server-sent events.
+- **Distances on the trail**: if places have `lat`/`lon`, participants can share their location to see how far away each place is. Unfound places are sorted nearest first and show encouraging messages as they get close. Requires HTTPS.
 
 ## Configuration
 
 ### Trail content
 
 The trail (title, description, consent text, items with their tasks and hints) is defined in [config.py](config.py) as `app_data`. Each entry in `id_dict` is keyed by a unique ID, which is encoded in its QR code. Alternative trails are kept in separate files (e.g. [config-WEL24.py](config-WEL24.py), [config-WEL26.py](config-WEL26.py)) and selected with the `TRAIL_CONFIG` environment variable. Item images are looked up in `static/` by the `image` name.
+
+For the live map and distances (see [config-WEL26.py](config-WEL26.py)):
+
+- each `id_dict` entry needs `lat` and `lon` (decimal degrees), and may set `near_text` (message when very close) and `photo_side` (`top`, `bottom`, `left` or `right`, to stop nearby photos overlapping on the map);
+- `map` sets the Mapbox `style`, `center`, `zoom`, `bounds`, `pitch`, `bearing`, `label_opacity`, `photo_size` and `stats_position`;
+- `proximity` sets the distance `tiers` (`max_distance`, `text`, `highlight`, `vibrate`), `far_text`, `hysteresis_m` and `update_interval_s`. Texts may use `{title}` and `{distance}`.
 
 ### Environment variables (`.env`)
 
@@ -25,6 +33,7 @@ Create a `.env` file in the project root (it is git-ignored). It is loaded autom
 |---|---|---|
 | `TRAIL_ADMIN_ACCESS_TOKEN` | Yes, for admin pages | Secret token granting access to `/qrs`, `/gallery` and the delete endpoints. If unset, all admin pages are denied. |
 | `TRAIL_CONFIG` | No | Path (relative to the project root) of the trail config file to load. Defaults to `config.py`. |
+| `MAPBOX_TOKEN` | For `/map` | Mapbox public (`pk.`) access token. It is sent to the browser, so restrict it to your domain in the Mapbox account settings. |
 
 Example:
 
@@ -43,6 +52,8 @@ Supply the token once using either:
 - an HTTP header: `Authorization: Bearer <TRAIL_ADMIN_ACCESS_TOKEN>`
 
 On success, a signed, HTTP-only cookie valid for 4 weeks is set and you are redirected to the clean URL, so the token does not stay in the address bar. Note that the cookie signing key is regenerated whenever the app restarts, so you need to log in again after a restart.
+
+The live map keeps the events in memory, so run the app as a single process (the default `app.py` server, or e.g. gunicorn with one worker and several threads).
 
 ## Install
 

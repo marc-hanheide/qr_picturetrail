@@ -176,8 +176,18 @@
             <div class="progress-bar" role="progressbar" style="width: {{ 100 * items_found / items_total }}%;" aria-valuenow="{{ 100.0 * items_found / items_total }}" aria-valuemin="0" aria-valuemax="100">{{ (100 * items_found // items_total) }}%</div>
         </div>
         <p>Find the remaining {{ items_total - items_found }} locations listed below in red and scan their QR Code with your phone.</p> 
-        <p>You can use <a href="https://navigateme.lincoln.ac.uk/" target="_blank">https://navigateme.lincoln.ac.uk/</a> to find your way.</p>
 
+    {% endif %}
+    {% set has_geo = app_data['id_dict'].values()|selectattr('lat', 'defined')|list|length > 0 %}
+    {% if has_geo %}
+    <div id="geoControls" class="my-3">
+        <button type="button" class="btn btn-warning" id="enableGeoBtn">
+            <i class="bi bi-geo-alt"></i> Show how far away the places are
+        </button>
+        <div id="geoStatus" class="small text-muted mt-1"></div>
+    </div>
+    <div id="nearBanner" class="alert alert-success shadow" role="status"
+         style="display:none; position:fixed; top:12px; left:12px; right:12px; z-index:1080; font-size:1.1rem;"></div>
     {% endif %}
     <table class="table table-bordered table-hover" style="vertical-align: middle; ">
         <thead>
@@ -186,16 +196,22 @@
                 <th style="text-align: center;">Found it yet?</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="placesTable">
         {% for item in app_data['id_dict'] %}
-            {% if session["found_" + item] %}
-                <tr class="table-success">
-            {% else %}
-                <tr class="table-danger">
-            {% endif %}
+            {% set place = app_data['id_dict'][item] %}
+            <tr class="{{ 'table-success' if session['found_' + item] else 'table-danger' }}"
+                data-item-id="{{ item }}"
+                data-title="{{ place['title'] }}"
+                data-found="{{ 'true' if session['found_' + item] else 'false' }}"
+                {% if place['lat'] is defined and place['lon'] is defined %}data-lat="{{ place['lat'] }}" data-lon="{{ place['lon'] }}"{% endif %}
+                {% if place['near_text'] is defined %}data-near-text="{{ place['near_text'] }}"{% endif %}>
                     <td style="text-align: center;">
                         <!-- <h4>{{ app_data['id_dict'][item] }}</h4> -->
                         <h4>{{ app_data['id_dict'][item]['title'] }}</h4>
+                        <div class="proximity" style="display:none;">
+                            <span class="badge rounded-pill bg-secondary proximity-distance" style="font-size:0.95rem;"></span>
+                            <div class="proximity-msg alert py-1 px-2 mt-2 mb-2" style="display:none;"></div>
+                        </div>
                         <p><strong>Where you can find me: </strong><br>{{ app_data['id_dict'][item]['hint']|safe }}</p>
                         {% set image_filename = app_data['id_dict'][item]['image'] + ".jpg" %}
                         {% if image_filename|file_exists %}
@@ -624,9 +640,171 @@ async function loadSessionPhotos() {
     }
 }
 
+// Distances to places from the device location
+const PROXIMITY = {{ proximity|tojson }};
+
+function haversine(lat1, lon1, lat2, lon2) {
+    const R = 6371000, rad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * rad, dLon = (lon2 - lon1) * rad;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function formatDistance(m) {
+    return m < 1000 ? `${Math.max(5, Math.round(m / 5) * 5)} m` : `${(m / 1000).toFixed(1)} km`;
+}
+
+function fillTemplate(text, vars) {
+    return text.replace(/\{(\w+)\}/g, (match, key) => key in vars ? vars[key] : match);
+}
+
+function initProximity() {
+    const btn = document.getElementById('enableGeoBtn');
+    if (!btn) return;
+    const statusEl = document.getElementById('geoStatus');
+    const banner = document.getElementById('nearBanner');
+    const tbody = document.getElementById('placesTable');
+    const rows = [...tbody.querySelectorAll('tr[data-item-id]')];
+    const tiers = PROXIMITY.tiers || [];
+    const hysteresis = PROXIMITY.hysteresis_m || 0;
+    const interval = (PROXIMITY.update_interval_s || 5) * 1000;
+    const tierState = new Map();
+    const announced = new Set();
+    let watchId = null, active = false, lastReorder = 0, reorderTimer = null, bannerTimer = null;
+
+    if (!('geolocation' in navigator) || !window.isSecureContext) {
+        btn.style.display = 'none';
+        statusEl.textContent = 'Distances are not available on this device or connection.';
+        return;
+    }
+
+    // the current tier gets extra slack so messages don't flicker at the boundary
+    function tierFor(distance, previous) {
+        for (let i = 0; i < tiers.length; i++) {
+            if (distance <= tiers[i].max_distance + (i === previous ? hysteresis : 0)) return i;
+        }
+        return -1;
+    }
+
+    function showBanner(text) {
+        banner.textContent = text;
+        banner.style.display = 'block';
+        clearTimeout(bannerTimer);
+        bannerTimer = setTimeout(() => { banner.style.display = 'none'; }, 6000);
+    }
+    banner.addEventListener('click', () => { banner.style.display = 'none'; });
+
+    function reorder() {
+        const sorted = [...rows].sort((a, b) => {
+            const fa = a.dataset.found === 'true', fb = b.dataset.found === 'true';
+            if (fa !== fb) return fa ? 1 : -1;
+            const da = !fa && a.dataset.distance ? +a.dataset.distance : Infinity;
+            const db = !fb && b.dataset.distance ? +b.dataset.distance : Infinity;
+            return (da - db) || (rows.indexOf(a) - rows.indexOf(b));
+        });
+        const current = [...tbody.children];
+        if (sorted.every((row, i) => row === current[i])) return;
+        const before = new Map(sorted.map(row => [row, row.getBoundingClientRect().top]));
+        sorted.forEach(row => tbody.appendChild(row));
+        sorted.forEach(row => {
+            const dy = before.get(row) - row.getBoundingClientRect().top;
+            if (dy) row.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 600, easing: 'ease-out' });
+        });
+    }
+
+    function scheduleReorder() {
+        if (reorderTimer) return;
+        reorderTimer = setTimeout(() => {
+            reorderTimer = null;
+            lastReorder = Date.now();
+            reorder();
+        }, Math.max(0, lastReorder + interval - Date.now()));
+    }
+
+    function update(pos) {
+        const { latitude, longitude, accuracy } = pos.coords;
+        const rough = accuracy > 50;
+        statusEl.textContent = `Location found (accurate to about ${Math.round(accuracy)} m).`;
+
+        rows.forEach(row => {
+            const box = row.querySelector('.proximity');
+            if (!row.dataset.lat || row.dataset.found === 'true') {
+                box.style.display = 'none';
+                return;
+            }
+            const distance = haversine(latitude, longitude, +row.dataset.lat, +row.dataset.lon);
+            row.dataset.distance = distance;
+            const vars = { distance: formatDistance(distance), title: row.dataset.title };
+            box.style.display = 'block';
+            row.querySelector('.proximity-distance').textContent = (rough ? '≈ ' : '') + fillTemplate(PROXIMITY.far_text, vars);
+
+            const previous = tierState.has(row) ? tierState.get(row) : -1;
+            const t = tierFor(distance, previous);
+            tierState.set(row, t);
+            const msgEl = row.querySelector('.proximity-msg');
+            if (t < 0) {
+                msgEl.style.display = 'none';
+                announced.delete(row.dataset.itemId);
+                return;
+            }
+            const tier = tiers[t];
+            const text = (t === 0 && row.dataset.nearText) ? row.dataset.nearText : tier.text;
+            const highlight = /^\w+$/.test(tier.highlight || '') ? tier.highlight : 'info';
+            msgEl.textContent = fillTemplate(text, vars);
+            msgEl.className = `proximity-msg alert alert-${highlight} py-1 px-2 mt-2 mb-2`;
+            msgEl.style.display = 'block';
+            if (tier.vibrate && !announced.has(row.dataset.itemId)) {
+                announced.add(row.dataset.itemId);
+                showBanner(msgEl.textContent);
+                if (navigator.vibrate) navigator.vibrate(200);
+            }
+        });
+        scheduleReorder();
+    }
+
+    function stop() {
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+    }
+
+    function start() {
+        if (watchId !== null) return;
+        active = true;
+        localStorage.setItem('trailGeo', 'on');
+        btn.style.display = 'none';
+        if (!statusEl.textContent.startsWith('Location found')) statusEl.textContent = 'Finding your location…';
+        watchId = navigator.geolocation.watchPosition(update, err => {
+            if (err.code === err.PERMISSION_DENIED) {
+                stop();
+                active = false;
+                localStorage.removeItem('trailGeo');
+                btn.style.display = '';
+                statusEl.textContent = 'Location permission was denied, so distances cannot be shown.';
+            } else {
+                statusEl.textContent = 'Waiting for a location fix…';
+            }
+        }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+    }
+
+    btn.addEventListener('click', start);
+    // save battery while the page is in the background
+    document.addEventListener('visibilitychange', () => {
+        if (!active) return;
+        if (document.hidden) stop(); else start();
+    });
+
+    // resume automatically after scanning a QR code, but never prompt without a tap
+    if (localStorage.getItem('trailGeo') === 'on' && navigator.permissions) {
+        navigator.permissions.query({ name: 'geolocation' })
+            .then(p => { if (p.state === 'granted') start(); })
+            .catch(() => {});
+    }
+}
+
 // Load photos when the page loads
 document.addEventListener('DOMContentLoaded', function() {
     loadSessionPhotos();
+    initProximity();
     
     // Check if consent modal should be shown
     {% if not session.get('consent_given') %}
