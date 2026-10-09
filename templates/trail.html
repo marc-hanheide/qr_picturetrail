@@ -1,67 +1,227 @@
 {% extends 'layout.html' %}
 
 {% block body %}
-<div class="mt-4 p-5 bg-primary text-white rounded">
-    <h1>{{ app_data['name'] }}</h1>
-    <p class="lead">Welcome to our little interactive trail. Find all the {{ items_total }} posters spread around the West End listed below and scan their QR code with your phone. Use the hints for each poster below to get an idea where you may find it.</p>
-    <p><strong>
-        Explore Lincoln West End Lights on <a style="color:rgb(137, 255, 86)" href="https://www.lincoln-west-end-lights.com/illuminations-2024/" target="_blank">our map</a>.
-    </strong></p>
-</div>
-{% if found %}
-<div class="row">
-        <div class="alert alert-success d-flex align-items-center alert-dismissible fade show" role="alert">
-            <!--<svg class="bi flex-shrink-0 me-2" role="img" aria-label="Success:"><use xlink:href="#check-circle-fill"/></svg>-->
-            <strong>Hooray! You have found the {{ app_data['id_dict'][found]['title'] }}! Look below for other pictures to search for.</strong>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            
+<!-- QR Scanner Library -->
+<script src="https://unpkg.com/qr-scanner@1.4.2/qr-scanner.umd.min.js"></script>
+
+<!-- Simple navigation -->
+<!-- <nav class="navbar navbar-expand-lg navbar-light bg-light mb-3">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/trail">{{ app_data['project_name'] }}</a>
+        <div class="navbar-nav ms-auto">
+            <a class="nav-link" href="/trail"><i class="bi bi-map"></i> Trail</a>
+            <a class="nav-link" href="/gallery"><i class="bi bi-camera"></i> Gallery</a>
+            <a class="nav-link" href="/qrs"><i class="bi bi-qr-code"></i> QR Codes</a>
         </div>
+    </div>
+</nav> -->
+
+<div class="mt-4 p-5 bg-primary text-white text-center rounded">
+    <h1>{{ app_data['name'] }}</h1>
+    <p class="lead">Welcome to our interactive trail. Find the {{ items_total }} locations.</p>
+    <p class="mb-0 text-center">Your unique ID: <strong><code class="text-light">{{ session['id'] }}</code></strong></p>
 </div>
+
+<!-- QR Scanner Section -->
+<div class="card mt-3">
+    <div class="card-header bg-info text-white">
+        <h5><i class="bi bi-qr-code-scan"></i> QR Code Scanner</h5>
+    </div>
+    <div class="card-body">
+        <p>Scan a QR code you found to unlock a location on the trail.</p>
+        
+        <!-- Scanner button -->
+        <div class="mb-3" id="qrScannerButtonContainer">
+            <button type="button" class="btn btn-info" id="openQrScannerBtn">
+                <i class="bi bi-qr-code-scan"></i> Open QR Scanner
+            </button>
+        </div>
+        
+        <!-- QR Scanner video element (hidden initially) -->
+        <div id="qrScannerContainer" style="display: none;" class="mb-3">
+            <div class="text-center mb-2">
+                <small class="text-muted">Point your camera at a QR code</small>
+            </div>
+            <video id="qrScannerVideo" width="100%" height="300" style="border-radius: 8px; border: 2px solid #ddd;"></video>
+            <div class="mt-2">
+                <button type="button" class="btn btn-secondary" id="closeQrScannerBtn">
+                    <i class="bi bi-x"></i> Close Scanner
+                </button>
+                <button type="button" class="btn btn-info ms-2" id="switchQrCameraBtn">
+                    <i class="bi bi-arrow-repeat"></i> Switch Camera
+                </button>
+            </div>
+        </div>
+        
+        <!-- Scanner feedback -->
+        <div id="qrScannerFeedback" style="display: none;" class="alert" role="alert">
+            <!-- Feedback messages will appear here -->
+        </div>
+    </div>
+</div>
+
+<!-- Flash messages for photo upload feedback -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+{% if found %}
+        
+        <!-- Photo upload section -->
+        <div class="card mt-3">
+            <div class="card-header bg-success text-white">
+                <h5>Hooray! You have found <i>{{ app_data['id_dict'][found]['title'] }}</i>!</h5>
+            </div>
+            <div class="card-body">
+
+                <h5>📸 Share Your Discovery!</h5>
+                
+                <h6>Your activitity:</h6>
+                <p><strong>{{ app_data['id_dict'][found]['text']|safe }}</strong></p>
+                
+                <p>Once done, look below for other pictures to search for.</p>
+
+                <!-- Camera buttons -->
+                <div class="mb-3" id="buttonContainer">
+                    <button type="button" class="btn btn-success me-2" id="openCameraBtn">
+                        <i class="bi bi-camera"></i> Open Camera
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="chooseFileBtn">
+                        <i class="bi bi-folder"></i> Choose from Gallery
+                    </button>
+                </div>
+                
+                <!-- Camera video element (hidden initially) -->
+                <div id="cameraContainer" style="display: none;" class="mb-3">
+                    <video id="camera" width="100%" height="300" autoplay playsinline style="border-radius: 8px;"></video>
+                    <canvas id="canvas" style="display: none;"></canvas>
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-primary" id="captureBtn">
+                            <i class="bi bi-camera-fill"></i> Capture Photo
+                        </button>
+                        <button type="button" class="btn btn-info me-2" id="switchCameraBtn">
+                            <i class="bi bi-arrow-repeat"></i> Switch Camera
+                        </button>
+                        <button type="button" class="btn btn-secondary" id="closeCameraBtn">
+                            <i class="bi bi-x"></i> Close Camera
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Preview area -->
+                <div id="previewContainer" style="display: none;" class="mb-3">
+                    <h6>Preview:</h6>
+                    <img id="preview" src="" alt="Preview" class="img-fluid" style="max-height: 300px; border-radius: 8px;">
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-success" id="confirmUploadBtn">
+                            <i class="bi bi-upload"></i> Upload This Photo
+                        </button>
+                        <button type="button" class="btn btn-secondary" id="retakeBtn">
+                            <i class="bi bi-arrow-clockwise"></i> Retake
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Traditional file upload form -->
+                <form method="POST" enctype="multipart/form-data" id="photoForm" style="display: none;">
+                    <input type="hidden" name="item_id" value="{{ found }}">
+                    <div class="mb-3">
+                        <label for="photo" class="form-label">Choose a photo:</label>
+                        <input type="file" class="form-control" id="photo" name="photo" accept="image/*">
+                        <div class="form-text">Select a photo from your device.</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="uploadBtn" disabled>
+                        <i class="bi bi-upload"></i> Upload Photo
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="cancelFileBtn">
+                        Cancel
+                    </button>
+                </form>
+                
+                <!-- Hidden form for camera uploads -->
+                <form method="POST" enctype="multipart/form-data" id="cameraForm" style="display: none;">
+                    <input type="hidden" name="item_id" value="{{ found }}">
+                    <input type="file" id="cameraPhoto" name="photo" style="display: none;">
+                </form>
+            </div>
+        </div>
+
 {% endif %}
 
-<div class="row">
     {% if items_found == items_total %}
     <h2>You completed the Trail!</h2>
         <div class="alert alert-success d-flex align-items-center alert-dismissible fade show" role="alert">
             <!--<svg class="bi flex-shrink-0 me-2" role="img" aria-label="Success:"><use xlink:href="#check-circle-fill"/></svg>-->
             <strong>
-                Congratulations! You have found all the posters! 
+                Congratulations! You have found all the locations! 
                 Here is your certificate (click it to download): <br>
                 <a href="../static/certificate.pdf" target="_blank">
                     <img style="width: 100%;" src="../static/certificate.png" class="img-fluid rounded" alt="certificate" />
                 </a>
-                <a href="/">Click here to start over.</a>
+                <a href="/?reset=true">Click here to start over.</a>
             </strong>
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     {% else %}
-        <h2>Posters to find</h2>
-        <strong>You have already found {{ items_found }} out of {{ items_total }} posters.</strong>
+        <h2>Locations to find</h2>
+        <strong>You have already found {{ items_found }} out of {{ items_total }} locations.</strong>
         <div class="progress">
             <div class="progress-bar" role="progressbar" style="width: {{ 100 * items_found / items_total }}%;" aria-valuenow="{{ 100.0 * items_found / items_total }}" aria-valuemin="0" aria-valuemax="100">{{ (100 * items_found // items_total) }}%</div>
         </div>
-        <p>Find the remaining {{ items_total - items_found }} posters listed below in red and scan their QR Code with your phone.</p> 
+        <p>Find the remaining {{ items_total - items_found }} locations listed below in red and scan their QR Code with your phone.</p> 
+        <p>You can use <a href="https://navigateme.lincoln.ac.uk/" target="_blank">https://navigateme.lincoln.ac.uk/</a> to find your way.</p>
 
     {% endif %}
     <table class="table table-bordered table-hover" style="vertical-align: middle; ">
         <thead>
             <tr>
-                <th style="text-align: center;">Poster</th>
+                <th style="text-align: center;">Location</th>
                 <th style="text-align: center;">Found it yet?</th>
             </tr>
         </thead>
         <tbody>
         {% for item in app_data['id_dict'] %}
             {% if session["found_" + item] %}
-                <tr style="background-color: lightgreen;">
+                <tr class="table-success">
             {% else %}
-                <tr style="background-color: lightcoral;">
+                <tr class="table-danger">
             {% endif %}
                     <td style="text-align: center;">
                         <!-- <h4>{{ app_data['id_dict'][item] }}</h4> -->
                         <h4>{{ app_data['id_dict'][item]['title'] }}</h4>
-                        <p><strong>Hint where you can find me: </strong><br>{{ app_data['id_dict'][item]['hint']|safe }}</p>
+                        <p><strong>Where you can find me: </strong><br>{{ app_data['id_dict'][item]['hint']|safe }}</p>
+                        {% set image_filename = app_data['id_dict'][item]['image'] + ".jpg" %}
+                        {% if image_filename|file_exists %}
                         <img style="width: 50%;" src="../static/{{ app_data['id_dict'][item]['image'] }}.jpg" class="img-fluid rounded float-right" alt="{{ item }}" />
+                        {% endif %}
+                        
+                        <!-- Display user-uploaded photos for this location -->
+                        {% if session["found_" + item] %}
+                            <div class="mt-2">
+                                {% set session_photos = [] %}
+                                {% for photo_file in session_photos %}
+                                    {% if photo_file.endswith('.jpg') or photo_file.endswith('.jpeg') or photo_file.endswith('.png') or photo_file.endswith('.gif') %}
+                                        <img src="../static/uploads/{{ session['id'] }}/{{ photo_file }}" 
+                                             class="photo-thumbnail me-1" 
+                                             style="width: 60px; height: 60px; object-fit: cover; cursor: pointer; border-radius: 4px;" 
+                                             onclick="showPhotoModal('../static/uploads/{{ session['id'] }}/{{ photo_file }}')"
+                                             alt="Your photo at {{ app_data['id_dict'][item]['title'] }}" />
+                                    {% endif %}
+                                {% endfor %}
+                                
+                                <!-- Check for photos by matching item ID in uploaded photos -->
+                                <div id="photos-{{ item }}" class="d-inline-block">
+                                    <!-- Photos will be loaded here by JavaScript -->
+                                </div>
+                            </div>
+                        {% endif %}
                         
                     </td>
                     <td>
@@ -69,6 +229,11 @@
                         <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor" class="bi bi-check" viewBox="0 0 16 16">
                             <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425z"/>
                         </svg>
+                        
+                        <!-- Show photo count if any photos exist for this location -->
+                        <div class="mt-1 small text-muted" id="photo-count-{{ item }}">
+                            <!-- Photo count will be shown here -->
+                        </div>
                     {% else %}
                         <b>Nope! Go, find it and scan its QR Code!</b>
                     {% endif %}
@@ -79,7 +244,738 @@
                     
     </table>
 
-
+    <!-- Start Over Button -->
+<div class="text-center mt-3">
+    <button type="button" class="btn btn-outline-danger btn-sm" id="startOverBtn">
+        <i class="bi bi-arrow-clockwise"></i> Start Over
+    </button>
 </div>
+
+
+<!-- Modal for displaying full-size photos -->
+<div class="modal fade" id="photoModal" tabindex="-1" aria-labelledby="photoModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="photoModalLabel">Your Photo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="modalPhoto" src="" alt="Full size photo" class="img-fluid" style="max-width: 100%; max-height: 70vh;">
+                <div class="mt-2">
+                    <small class="text-muted" id="photoInfo"></small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Consent Modal -->
+<div class="modal fade" id="consentModal" tabindex="-1" aria-labelledby="consentModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="consentModalLabel">
+                    <i class="bi bi-info-circle"></i> Data Consent & Privacy
+                </h5>
+            </div>
+            <div class="modal-body">
+                <div class="consent-content">
+                    {{ app_data['data_consent']|safe }}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-success" id="acceptConsentBtn">
+                    <i class="bi bi-check-circle"></i> I Agree and Accept
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<script>
+// QR Scanner functionality
+let qrScanner = null;
+let qrCurrentFacingMode = 'environment'; // Start with back camera
+
+// QR Scanner elements
+const openQrScannerBtn = document.getElementById('openQrScannerBtn');
+const qrScannerContainer = document.getElementById('qrScannerContainer');
+const qrScannerVideo = document.getElementById('qrScannerVideo');
+const closeQrScannerBtn = document.getElementById('closeQrScannerBtn');
+const switchQrCameraBtn = document.getElementById('switchQrCameraBtn');
+const qrScannerButtonContainer = document.getElementById('qrScannerButtonContainer');
+const qrScannerFeedback = document.getElementById('qrScannerFeedback');
+
+// Function to show QR scanner feedback
+function showQrFeedback(message, type = 'info') {
+    qrScannerFeedback.className = `alert alert-${type}`;
+    qrScannerFeedback.textContent = message;
+    qrScannerFeedback.style.display = 'block';
+    
+    // Auto-hide after 5 seconds for non-error messages
+    if (type !== 'danger') {
+        setTimeout(() => {
+            qrScannerFeedback.style.display = 'none';
+        }, 5000);
+    }
+}
+
+// Function to validate if URL belongs to current application
+function isValidApplicationUrl(scannedUrl) {
+    try {
+        const scannedUrlObj = new URL(scannedUrl);
+        const currentUrlObj = new URL(window.location.href);
+        
+        // Check if the protocol, hostname, and port match
+        return (
+            scannedUrlObj.protocol === currentUrlObj.protocol &&
+            scannedUrlObj.hostname === currentUrlObj.hostname &&
+            scannedUrlObj.port === currentUrlObj.port
+        );
+    } catch (error) {
+        console.error('Invalid URL:', error);
+        return false;
+    }
+}
+
+// Function to handle QR code detection
+function handleQrResult(result) {
+    const scannedUrl = result.data;
+    
+    // Validate the URL
+    if (!isValidApplicationUrl(scannedUrl)) {
+        showQrFeedback('QR code contains an invalid or external URL. Only QR codes from this application are allowed.', 'warning');
+        return;
+    }
+    
+    // Stop the scanner
+    if (qrScanner) {
+        qrScanner.stop();
+        qrScanner = null;
+    }
+    
+    // Hide scanner UI
+    qrScannerContainer.style.display = 'none';
+    qrScannerButtonContainer.style.display = 'block';
+    
+    // Show success message
+    showQrFeedback('QR code scanned successfully! Redirecting...', 'success');
+    
+    // Redirect to the scanned URL after a short delay
+    setTimeout(() => {
+        window.location.href = scannedUrl;
+    }, 1500);
+}
+
+// Function to start QR scanner
+async function startQrScanner(facingMode = qrCurrentFacingMode) {
+    try {
+        // Get available video devices
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        
+        let scannerOptions = {
+            returnDetailedScanResult: true,
+            highlightScanRegion: true,
+            highlightCodeOutline: true,
+            maxScansPerSecond: 5,
+        };
+        
+        // If specific devices are available, try to use them
+        if (videoDevices.length > 1) {
+            // Try to find specific camera by facing mode
+            const backCamera = videoDevices.find(device => 
+                device.label.toLowerCase().includes('back') || 
+                device.label.toLowerCase().includes('rear') ||
+                device.label.toLowerCase().includes('environment')
+            );
+            const frontCamera = videoDevices.find(device => 
+                device.label.toLowerCase().includes('front') || 
+                device.label.toLowerCase().includes('user') ||
+                device.label.toLowerCase().includes('facing')
+            );
+            
+            if (facingMode === 'environment' && backCamera) {
+                scannerOptions.preferredCamera = backCamera.deviceId;
+            } else if (facingMode === 'user' && frontCamera) {
+                scannerOptions.preferredCamera = frontCamera.deviceId;
+            } else {
+                scannerOptions.preferredCamera = facingMode;
+            }
+        } else {
+            // Fall back to facing mode constraint
+            scannerOptions.preferredCamera = facingMode;
+        }
+        
+        // Initialize QR Scanner
+        qrScanner = new QrScanner(qrScannerVideo, handleQrResult, scannerOptions);
+        
+        // Start scanning
+        await qrScanner.start();
+        qrCurrentFacingMode = facingMode;
+        
+        showQrFeedback('Scanner ready. Point your camera at a QR code.', 'info');
+        
+    } catch (error) {
+        console.error('Error starting QR scanner:', error);
+        
+        // Try alternative camera if the preferred one fails
+        if (facingMode === 'environment') {
+            try {
+                qrScanner = new QrScanner(
+                    qrScannerVideo,
+                    handleQrResult,
+                    {
+                        returnDetailedScanResult: true,
+                        preferredCamera: 'user',
+                        highlightScanRegion: true,
+                        highlightCodeOutline: true,
+                        maxScansPerSecond: 5,
+                    }
+                );
+                await qrScanner.start();
+                qrCurrentFacingMode = 'user';
+                showQrFeedback('Scanner ready with front camera. Point your camera at a QR code.', 'info');
+            } catch (fallbackError) {
+                throw new Error('Could not access any camera');
+            }
+        } else {
+            throw new Error('Could not access camera');
+        }
+    }
+}
+
+// Open QR scanner
+if (openQrScannerBtn) {
+    openQrScannerBtn.addEventListener('click', async function() {
+        try {
+            qrScannerFeedback.style.display = 'none';
+            
+            // Check available cameras first
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            
+            // Hide switch button if only one camera is available
+            if (videoDevices.length < 2) {
+                switchQrCameraBtn.style.display = 'none';
+            } else {
+                switchQrCameraBtn.style.display = 'inline-block';
+            }
+            
+            await startQrScanner();
+            qrScannerContainer.style.display = 'block';
+            qrScannerButtonContainer.style.display = 'none';
+        } catch (error) {
+            console.error('Error accessing camera for QR scanner:', error);
+            showQrFeedback('Could not access camera. Please check permissions and try again.', 'danger');
+        }
+    });
+}
+
+// Close QR scanner
+if (closeQrScannerBtn) {
+    closeQrScannerBtn.addEventListener('click', function() {
+        if (qrScanner) {
+            qrScanner.stop();
+            qrScanner = null;
+        }
+        qrScannerContainer.style.display = 'none';
+        qrScannerButtonContainer.style.display = 'block';
+        qrScannerFeedback.style.display = 'none';
+    });
+}
+
+// Switch QR camera
+if (switchQrCameraBtn) {
+    switchQrCameraBtn.addEventListener('click', async function() {
+        const newFacingMode = qrCurrentFacingMode === 'environment' ? 'user' : 'environment';
+        
+        // Show loading state
+        switchQrCameraBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Switching...';
+        switchQrCameraBtn.disabled = true;
+        
+        try {
+            // Stop current scanner completely
+            if (qrScanner) {
+                await qrScanner.stop();
+                qrScanner.destroy();
+                qrScanner = null;
+            }
+            
+            // Wait a moment for camera to be released
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Check if the desired camera is available
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            
+            if (videoDevices.length < 2) {
+                throw new Error('Only one camera available');
+            }
+            
+            // Try to start with new camera
+            await startQrScanner(newFacingMode);
+            
+            // Reset button
+            switchQrCameraBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Switch Camera';
+            switchQrCameraBtn.disabled = false;
+            
+            showQrFeedback(`Switched to ${newFacingMode === 'environment' ? 'back' : 'front'} camera`, 'success');
+            
+        } catch (error) {
+            console.error('Error switching QR scanner camera:', error);
+            
+            // Try to restart with the original camera
+            try {
+                await startQrScanner(qrCurrentFacingMode);
+                showQrFeedback('Could not switch camera. Only one camera may be available.', 'warning');
+            } catch (restartError) {
+                console.error('Error restarting original camera:', restartError);
+                showQrFeedback('Error switching camera. Please close and reopen the scanner.', 'danger');
+            }
+            
+            // Reset button
+            switchQrCameraBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Switch Camera';
+            switchQrCameraBtn.disabled = false;
+        }
+    });
+}
+
+// Function to show photo in modal
+function showPhotoModal(imageSrc, photoInfo = '') {
+    const modalPhoto = document.getElementById('modalPhoto');
+    const photoInfoElement = document.getElementById('photoInfo');
+    
+    modalPhoto.src = imageSrc;
+    photoInfoElement.textContent = photoInfo;
+    
+    const photoModal = new bootstrap.Modal(document.getElementById('photoModal'));
+    photoModal.show();
+}
+
+// Function to load photos for the current session
+async function loadSessionPhotos() {
+    const sessionId = '{{ session["id"] }}';
+    
+    try {
+        // Fetch session data from the trail.json file
+        const response = await fetch(`../static/uploads/${sessionId}/trail.json`);
+        
+        if (!response.ok) {
+            console.log('No session data found');
+            return;
+        }
+        
+        const sessionData = await response.json();
+        const photos = sessionData.photos || [];
+        
+        // Group photos by item_id
+        const photosByItem = {};
+        photos.forEach(photo => {
+            const itemId = photo.item_id;
+            if (!photosByItem[itemId]) {
+                photosByItem[itemId] = [];
+            }
+            photosByItem[itemId].push(photo);
+        });
+        
+        // Display photos for each item
+        Object.keys(photosByItem).forEach(itemId => {
+            const photosContainer = document.getElementById(`photos-${itemId}`);
+            const photoCountElement = document.getElementById(`photo-count-${itemId}`);
+            
+            if (photosContainer && photosByItem[itemId].length > 0) {
+                const itemPhotos = photosByItem[itemId];
+                
+                // Clear existing content
+                photosContainer.innerHTML = '';
+                
+                // Add thumbnails
+                itemPhotos.forEach(photo => {
+                    const img = document.createElement('img');
+                    img.src = `../static/uploads/${sessionId}/${photo.filename}`;
+                    img.className = 'photo-thumbnail me-1 mb-1';
+                    img.style.cssText = 'width: 60px; height: 60px; object-fit: cover; cursor: pointer; border-radius: 4px; border: 2px solid #ddd;';
+                    img.alt = `Your photo`;
+                    img.title = `Uploaded on ${new Date(photo.uploaded_at).toLocaleString()}`;
+                    
+                    // Add click handler for modal
+                    img.addEventListener('click', function() {
+                        const photoInfo = `Uploaded on ${new Date(photo.uploaded_at).toLocaleString()}`;
+                        showPhotoModal(img.src, photoInfo);
+                    });
+                    
+                    photosContainer.appendChild(img);
+                });
+                
+                // Update photo count
+                if (photoCountElement) {
+                    const count = itemPhotos.length;
+                    photoCountElement.textContent = `${count} photo${count !== 1 ? 's' : ''} uploaded`;
+                }
+            }
+        });
+        
+    } catch (error) {
+        console.log('Could not load session photos:', error);
+    }
+}
+
+// Load photos when the page loads
+document.addEventListener('DOMContentLoaded', function() {
+    loadSessionPhotos();
+    
+    // Check if consent modal should be shown
+    {% if not session.get('consent_given') %}
+    // Show consent modal on first visit
+    const consentModal = new bootstrap.Modal(document.getElementById('consentModal'));
+    consentModal.show();
+    {% endif %}
+});
+
+// Cleanup QR scanner when page is unloaded
+window.addEventListener('beforeunload', function() {
+    if (qrScanner) {
+        qrScanner.stop();
+        qrScanner = null;
+    }
+});
+
+// Stop QR scanner when other camera functions are used
+function stopQrScannerIfActive() {
+    if (qrScanner) {
+        qrScanner.stop();
+        qrScanner = null;
+        qrScannerContainer.style.display = 'none';
+        qrScannerButtonContainer.style.display = 'block';
+        qrScannerFeedback.style.display = 'none';
+    }
+}
+
+// Camera and photo upload functionality
+let stream = null;
+let capturedImageBlob = null;
+let currentFacingMode = 'environment'; // Start with back camera
+
+// Elements
+const openCameraBtn = document.getElementById('openCameraBtn');
+const chooseFileBtn = document.getElementById('chooseFileBtn');
+const cameraContainer = document.getElementById('cameraContainer');
+const camera = document.getElementById('camera');
+const canvas = document.getElementById('canvas');
+const captureBtn = document.getElementById('captureBtn');
+const switchCameraBtn = document.getElementById('switchCameraBtn');
+const closeCameraBtn = document.getElementById('closeCameraBtn');
+const previewContainer = document.getElementById('previewContainer');
+const preview = document.getElementById('preview');
+const confirmUploadBtn = document.getElementById('confirmUploadBtn');
+const retakeBtn = document.getElementById('retakeBtn');
+const photoForm = document.getElementById('photoForm');
+const cameraForm = document.getElementById('cameraForm');
+const photo = document.getElementById('photo');
+const uploadBtn = document.getElementById('uploadBtn');
+const cancelFileBtn = document.getElementById('cancelFileBtn');
+const buttonContainer = document.getElementById('buttonContainer');
+
+// Function to start camera with specified facing mode
+async function startCamera(facingMode = currentFacingMode) {
+    try {
+        // Stop existing stream if any
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+        }
+        
+        stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+                facingMode: facingMode,
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            } 
+        });
+        camera.srcObject = stream;
+        currentFacingMode = facingMode;
+    } catch (err) {
+        console.error('Error accessing camera:', err);
+        // If the requested camera fails, try the other one
+        if (facingMode === 'environment') {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'user',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    } 
+                });
+                camera.srcObject = stream;
+                currentFacingMode = 'user';
+            } catch (fallbackErr) {
+                throw new Error('Could not access any camera');
+            }
+        } else {
+            throw new Error('Could not access camera');
+        }
+    }
+}
+
+// Open camera
+if (openCameraBtn) {
+    openCameraBtn.addEventListener('click', async function() {
+        try {
+            // Stop QR scanner if active to avoid camera conflicts
+            stopQrScannerIfActive();
+            
+            await startCamera();
+            cameraContainer.style.display = 'block';
+            buttonContainer.style.display = 'none';
+        } catch (err) {
+            console.error('Error accessing camera:', err);
+            alert('Could not access camera. Please check permissions or use the file upload option.');
+        }
+    });
+}
+
+// Switch camera
+if (switchCameraBtn) {
+    switchCameraBtn.addEventListener('click', async function() {
+        const newFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+        
+        // Show loading state
+        switchCameraBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Switching...';
+        switchCameraBtn.disabled = true;
+        
+        try {
+            await startCamera(newFacingMode);
+            // Reset button text
+            switchCameraBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Switch Camera';
+            switchCameraBtn.disabled = false;
+        } catch (err) {
+            console.error('Error switching camera:', err);
+            alert('Could not switch camera. The other camera may not be available.');
+            // Reset button text
+            switchCameraBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Switch Camera';
+            switchCameraBtn.disabled = false;
+        }
+    });
+}
+
+// Capture photo
+if (captureBtn) {
+    captureBtn.addEventListener('click', function() {
+        const context = canvas.getContext('2d');
+        canvas.width = camera.videoWidth;
+        canvas.height = camera.videoHeight;
+        context.drawImage(camera, 0, 0);
+        
+        // Convert canvas to blob
+        canvas.toBlob(function(blob) {
+            capturedImageBlob = blob;
+            const url = URL.createObjectURL(blob);
+            preview.src = url;
+            
+            // Hide camera, show preview
+            cameraContainer.style.display = 'none';
+            previewContainer.style.display = 'block';
+            
+            // Stop camera stream
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+        }, 'image/jpeg', 0.8);
+    });
+}
+
+// Close camera
+if (closeCameraBtn) {
+    closeCameraBtn.addEventListener('click', function() {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            stream = null;
+        }
+        cameraContainer.style.display = 'none';
+        buttonContainer.style.display = 'block';
+    });
+}
+
+// Confirm upload (camera photo)
+if (confirmUploadBtn) {
+    confirmUploadBtn.addEventListener('click', function() {
+        if (capturedImageBlob) {
+            // Create a File object from the blob
+            const file = new File([capturedImageBlob], 'camera_photo.jpg', { type: 'image/jpeg' });
+            
+            // Create FormData and append the file
+            const formData = new FormData();
+            formData.append('photo', file);
+            formData.append('item_id', document.querySelector('input[name="item_id"]').value);
+            
+            // Show loading state
+            confirmUploadBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Uploading...';
+            confirmUploadBtn.disabled = true;
+            
+            // Send the form data
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.ok) {
+                    // Reload the photos before refreshing the page
+                    loadSessionPhotos();
+                    // Small delay to allow photo loading, then reload page
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+                } else {
+                    throw new Error('Upload failed');
+                }
+            })
+            .catch(error => {
+                console.error('Error uploading photo:', error);
+                alert('Failed to upload photo. Please try again.');
+                confirmUploadBtn.innerHTML = '<i class="bi bi-upload"></i> Upload This Photo';
+                confirmUploadBtn.disabled = false;
+            });
+        }
+    });
+}
+
+// Retake photo
+if (retakeBtn) {
+    retakeBtn.addEventListener('click', function() {
+        previewContainer.style.display = 'none';
+        buttonContainer.style.display = 'block';
+        capturedImageBlob = null;
+        if (preview.src) {
+            URL.revokeObjectURL(preview.src);
+        }
+    });
+}
+
+// Choose file from gallery
+if (chooseFileBtn) {
+    chooseFileBtn.addEventListener('click', function() {
+        photoForm.style.display = 'block';
+        buttonContainer.style.display = 'none';
+    });
+}
+
+// Cancel file upload
+if (cancelFileBtn) {
+    cancelFileBtn.addEventListener('click', function() {
+        photoForm.style.display = 'none';
+        buttonContainer.style.display = 'block';
+        photo.value = '';
+        uploadBtn.disabled = true;
+    });
+}
+
+// Enable upload button when file is selected
+if (photo) {
+    photo.addEventListener('change', function() {
+        if (this.files && this.files.length > 0) {
+            uploadBtn.disabled = false;
+        } else {
+            uploadBtn.disabled = true;
+        }
+    });
+}
+
+// Start Over functionality with confirmation dialog
+const startOverBtn = document.getElementById('startOverBtn');
+if (startOverBtn) {
+    startOverBtn.addEventListener('click', function() {
+        // Create a custom confirmation dialog
+        const confirmDialog = document.createElement('div');
+        confirmDialog.className = 'modal fade';
+        confirmDialog.id = 'confirmStartOverModal';
+        confirmDialog.setAttribute('tabindex', '-1');
+        confirmDialog.setAttribute('aria-labelledby', 'confirmStartOverModalLabel');
+        confirmDialog.setAttribute('aria-hidden', 'true');
+        
+        confirmDialog.innerHTML = `
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title" id="confirmStartOverModalLabel">
+                            <i class="bi bi-exclamation-triangle"></i> Confirm Start Over
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p><strong>Are you sure you want to start over?</strong></p>
+                        <p>This will reset your progress and you will lose all your found locations and uploaded photos. This action cannot be undone.</p>
+                        <p class="text-muted">Current progress: {{ items_found }} out of {{ items_total }} locations found.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="bi bi-x"></i> Cancel
+                        </button>
+                        <button type="button" class="btn btn-danger" id="confirmStartOverAction">
+                            <i class="bi bi-arrow-clockwise"></i> Yes, Start Over
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Add the modal to the document
+        document.body.appendChild(confirmDialog);
+        
+        // Show the modal
+        const modal = new bootstrap.Modal(confirmDialog);
+        modal.show();
+        
+        // Handle the confirmation action
+        const confirmAction = confirmDialog.querySelector('#confirmStartOverAction');
+        confirmAction.addEventListener('click', function() {
+            // Redirect to reset URL
+            window.location.href = '/?reset=true';
+        });
+        
+        // Clean up modal when it's hidden
+        confirmDialog.addEventListener('hidden.bs.modal', function() {
+            document.body.removeChild(confirmDialog);
+        });
+    });
+}
+
+// Consent handling
+const acceptConsentBtn = document.getElementById('acceptConsentBtn');
+if (acceptConsentBtn) {
+    acceptConsentBtn.addEventListener('click', function() {
+        // Show loading state
+        acceptConsentBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Processing...';
+        acceptConsentBtn.disabled = true;
+        
+        // Send consent acceptance to server
+        fetch('/accept-consent', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Hide the modal
+                const consentModal = bootstrap.Modal.getInstance(document.getElementById('consentModal'));
+                consentModal.hide();
+            } else {
+                throw new Error('Failed to save consent');
+            }
+        })
+        .catch(error => {
+            console.error('Error saving consent:', error);
+            alert('There was an error saving your consent. Please try again.');
+            acceptConsentBtn.innerHTML = '<i class="bi bi-check-circle"></i> I Agree and Accept';
+            acceptConsentBtn.disabled = false;
+        });
+    });
+}
+</script>
 
 {% endblock %}
