@@ -20,9 +20,26 @@ from uuid import uuid4
 from flask import Flask, render_template, request, send_file, session, redirect, flash, url_for, make_response
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from PIL import Image
+from dotenv import load_dotenv
 
-# Local imports
-from config import app_data
+import importlib.util
+
+load_dotenv()
+
+
+def load_app_data():
+    """Load app_data from the file in TRAIL_CONFIG (default: config.py)."""
+    config_path = os.environ.get('TRAIL_CONFIG', 'config.py')
+    spec = importlib.util.spec_from_file_location('trail_config', config_path)
+    if spec is None or not path.isfile(config_path):
+        raise FileNotFoundError(f"Trail config file not found: {config_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    print(f"Loaded trail config from {config_path}")
+    return module.app_data
+
+
+app_data = load_app_data()
 
 
 def generate_session_id():

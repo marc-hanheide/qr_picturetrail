@@ -6,3 +6,4 @@ Pillow
 black
 coolname
 itsdangerous
+python-dotenv

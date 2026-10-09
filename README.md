@@ -1,5 +1,48 @@
 # qr_picturetrail
-A simple web app for a picture trail
+A simple Flask web app for a QR code picture trail. Participants scan QR codes placed around a site, each scan marks a location as found, and groups can upload a photo for every task. Admins can print the QR codes and browse, moderate and delete the uploaded photos.
+
+## Features
+
+- **Trail** (`/trail`): progress tracking per participant session, with a human-readable session ID (e.g. `ambitious-turaco-of-joviality`) and a data consent prompt before taking part.
+- **Photo uploads**: PNG, JPG, JPEG and GIF up to 16 MB, automatically rescaled to a maximum of 1024x1024 px. Photos are stored per session in `static/uploads/<session-id>/` together with a `trail.json` record of found items and photos.
+- **Reset**: `/?reset=1` clears the current session and starts a new one.
+- **Logging**: every QR scan is appended to `log.csv`, which can be downloaded via `/log`.
+- **Admin pages** (token protected):
+  - `/qrs`: printable QR codes for all trail items.
+  - `/gallery`: paginated gallery of all sessions and photos, with options to delete single photos or all sessions.
+
+## Configuration
+
+### Trail content
+
+The trail (title, description, consent text, items with their tasks and hints) is defined in [config.py](config.py) as `app_data`. Each entry in `id_dict` is keyed by a unique ID, which is encoded in its QR code. Alternative trails are kept in separate files (e.g. [config-WEL24.py](config-WEL24.py), [config-WEL26.py](config-WEL26.py)) and selected with the `TRAIL_CONFIG` environment variable. Item images are looked up in `static/` by the `image` name.
+
+### Environment variables (`.env`)
+
+Create a `.env` file in the project root (it is git-ignored). It is loaded automatically by the app and by Docker Compose; variables already set in the shell take precedence.
+
+| Variable | Required | Description |
+|---|---|---|
+| `TRAIL_ADMIN_ACCESS_TOKEN` | Yes, for admin pages | Secret token granting access to `/qrs`, `/gallery` and the delete endpoints. If unset, all admin pages are denied. |
+| `TRAIL_CONFIG` | No | Path (relative to the project root) of the trail config file to load. Defaults to `config.py`. |
+
+Example:
+
+```
+TRAIL_ADMIN_ACCESS_TOKEN=change-me-to-a-long-random-secret
+TRAIL_CONFIG=config-WEL26.py
+```
+
+Use a long random value, e.g. generated with `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
+
+### Admin access
+
+Supply the token once using either:
+
+- a URL parameter: `https://<host>/qrs?token=<TRAIL_ADMIN_ACCESS_TOKEN>`
+- an HTTP header: `Authorization: Bearer <TRAIL_ADMIN_ACCESS_TOKEN>`
+
+On success, a signed, HTTP-only cookie valid for 4 weeks is set and you are redirected to the clean URL, so the token does not stay in the address bar. Note that the cookie signing key is regenerated whenever the app restarts, so you need to log in again after a restart.
 
 ## Install
 
@@ -9,11 +52,31 @@ A simple web app for a picture trail
 
 ## Run
 
-`python app.py`
+### Locally
 
-### NGrok
+```
+python app.py
+```
 
-To deploy publicly, use the ngrok command `ngrok1 -proto https -subdomain weltrail 5000` (only if you have your own ngrok server available and configured)
+The app listens on port `5999` (http://localhost:5999).
+
+### Docker Compose
+
+```
+docker compose build
+docker compose up -d
+```
+
+The image is built from [.devcontainer/Dockerfile](.devcontainer/Dockerfile), the project folder is mounted to `/app` (so uploads and `log.csv` persist on the host) and port `5999` is exposed. `TRAIL_ADMIN_ACCESS_TOKEN` and `TRAIL_CONFIG` are taken from `.env`.
+
+### Public deployment
+
+The app respects `X-Forwarded-Proto` and `X-Forwarded-For`, so it can run behind a reverse proxy or tunnel. Generated QR codes use the host the admin page was accessed from, so open `/qrs` via the public URL before printing.
+
+- **zrok**: a commented-out `zrok` service is included in [compose.yml](compose.yml). It additionally requires `ZROK_TOKEN`, `ZROK_API_ENDPOINT`, `ZROK_ENV_NAME` and `ZROK_NAME` in `.env`.
+- **ngrok**: `ngrok1 -proto https -subdomain weltrail 5999` (only if you have your own ngrok server available and configured).
+
+## Example trail content (WEL24)
 
 
 
