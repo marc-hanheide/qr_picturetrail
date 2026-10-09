@@ -648,14 +648,23 @@ def contact():
     return render_template("contact.html", app_data=app_data)
 
 
-@app.route("/qr/<id>")
-def qr(id):
+def qr_png(url):
     import qrcode, io
 
     image = io.BytesIO()
-    qrcode.make(get_base_url(request) + "trail?id=" + id).save(image, "PNG")
+    qrcode.make(url).save(image, "PNG")
     image.seek(0)
     return send_file(image, mimetype="image/png")
+
+
+@app.route("/qr/<id>")
+def qr(id):
+    return qr_png(get_base_url(request) + "trail?id=" + id)
+
+
+@app.route("/qr-join")
+def qr_join():
+    return qr_png(get_base_url(request) + "trail")
 
 
 @app.route("/log")
@@ -700,6 +709,7 @@ def live_map():
         app_data=app_data,
         map_config=app_data["map"],
         mapbox_token=os.environ.get("MAPBOX_TOKEN", ""),
+        join_url=get_base_url(request) + "trail",
     )
 
 
