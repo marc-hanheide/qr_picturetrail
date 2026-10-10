@@ -7,6 +7,11 @@ app_data = {
     "project_name": "WEL 2026 Picture Trail",
     "keywords": "qr, trail, kids, children, light, west end lights, lincoln, flask, webapp",
     "upload_folder": "static/uploads/",
+    # optional, any key left out uses the default dark theme from app.py
+    "theme": {
+        "bg": "#0d1226",
+        "accent": "#ffcf5c",
+    },
     "map": {
         "style": "mapbox://styles/mapbox/dark-v11",
         "label_opacity": 0.45,  # dims street names so the map stays a backdrop

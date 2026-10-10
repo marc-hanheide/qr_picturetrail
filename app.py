@@ -479,6 +479,34 @@ def get_proximity_config():
     return {**DEFAULT_PROXIMITY, **app_data.get("proximity", {})}
 
 
+DEFAULT_THEME = {
+    "bg": "#0d1226",
+    "surface": "#171f3d",
+    "surface_2": "#222c52",
+    "text": "#f3f5fb",
+    "muted": "#a4aecb",
+    "accent": "#ffcf5c",
+    "accent_text": "#2a1d00",
+    "success": "#5ee09a",
+    "info": "#7cc8ff",
+    "danger": "#ff8080",
+}
+
+
+def get_theme():
+    return {**DEFAULT_THEME, **app_data.get("theme", {})}
+
+
+def get_session_photos(session_id):
+    """Photo URLs of a session, grouped by item id, oldest first."""
+    photos = {}
+    for photo in load_session_data(session_id).get('photos', []):
+        item_id, filename = photo.get('item_id'), photo.get('filename', '')
+        if item_id in app_data['id_dict'] and path.isfile(path.join(app_data['upload_folder'], session_id, filename)):
+            photos.setdefault(item_id, []).append(upload_url(session_id, filename))
+    return photos
+
+
 def get_map_places():
     """Places that have GPS coordinates, in id_dict order."""
     places = []
@@ -552,6 +580,7 @@ def trail():
     if request.method == 'POST' and 'photo' in request.files:
         file = request.files['photo']
         item_id = request.form.get('item_id')
+        wants_json = request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html
         
         if file and file.filename != '' and allowed_file(file.filename) and item_id in app_data["id_dict"]:
             # Count current found items
@@ -575,12 +604,18 @@ def trail():
             # the redirect back to ?id= must not count as another check-in on the map
             session["just_uploaded"] = True
             
+            if wants_json:
+                return {"success": True}
             flash('Photo uploaded successfully!', 'success')
         else:
+            if wants_json:
+                return {"success": False, "message": "Invalid file or item."}, 400
             flash('Invalid file or item. Please try again.', 'error')
         
         return redirect(url_for('trail', id=item_id))
     
+    just_uploaded = session.pop("just_uploaded", False)
+
     # Mark item as found if ID is provided
     if id in app_data["id_dict"]:
         found_id = "found_" + id
@@ -590,7 +625,7 @@ def trail():
         item_name = app_data["id_dict"][id]["image"]
         update_session_with_item(session["id"], id, item_name)
 
-        if not session.pop("just_uploaded", False):
+        if not just_uploaded:
             is_new = stats_tracker.record_checkin(session["id"], id)
             event_broker.publish("checkin", {"item_id": id, "new": is_new})
             event_broker.publish("stats", stats_tracker.snapshot())
@@ -625,10 +660,13 @@ def trail():
     return render_template(
         "trail.html",
         app_data=app_data,
-        found=id,
+        found=id if id in app_data["id_dict"] else "",
         items_found=items_found,
         items_total=items_total,
         proximity=get_proximity_config(),
+        theme=get_theme(),
+        photos_by_item=get_session_photos(session["id"]),
+        just_uploaded=just_uploaded and id in app_data["id_dict"],
     )
 
 
