@@ -697,7 +697,9 @@ def local_time(iso_ts):
 
 
 def format_duration(seconds):
-    minutes = max(1, int(seconds // 60))
+    minutes = int(seconds / 60 + 0.5)
+    if minutes < 1:
+        return "< 1 min"
     return f"{minutes} min" if minutes < 60 else f"{minutes // 60} h {minutes % 60:02d} min"
 
 
@@ -714,7 +716,7 @@ def draw_star(pdf, cx, cy, radius, colour):
     pdf.drawPath(star, stroke=0, fill=1)
 
 
-def build_certificate_pdf(output, explorer_name, visits, photo_count, completed_at, started_at):
+def build_certificate_pdf(output, explorer_name, visits, photo_count, completed_at):
     """Landscape A4 certificate; visits is a list of (item_id, local datetime) in the order found."""
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER
@@ -828,7 +830,7 @@ def build_certificate_pdf(output, explorer_name, visits, photo_count, completed_
     tiles = [
         (f"{len(visits)} of {total}", "places found"),
         (str(photo_count), "photo shared" if photo_count == 1 else "photos shared"),
-        (format_duration((completed_at - started_at).total_seconds()), "to complete the trail"),
+        (format_duration((visits[-1][1] - visits[0][1]).total_seconds()), "exploring the trail"),
     ]
     tile_h = 19 * mm
     for index, (value, label) in enumerate(tiles):
@@ -868,8 +870,7 @@ def certificate():
     photo_count = sum(len(urls) for urls in get_session_photos(session["id"]).values())
     explorer_name = session["id"].replace("-", " ").title()
     output = io.BytesIO()
-    build_certificate_pdf(output, explorer_name, visits, photo_count,
-                          completed_at=visits[required - 1][1], started_at=visits[0][1])
+    build_certificate_pdf(output, explorer_name, visits, photo_count, completed_at=visits[required - 1][1])
     output.seek(0)
     return send_file(
         output,
