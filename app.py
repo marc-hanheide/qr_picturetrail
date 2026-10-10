@@ -76,10 +76,10 @@ makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # if file exists open in append mode, if not create it
 
-LOG_FILE = "log.csv"
+LOG_FILE = os.environ.get('TRAIL_LOG_FILE', '/tmp/qrtrail.log') 
 
-if path.exists("log.csv"):
-    csv_file = open("log.csv", "a")
+if path.exists(LOG_FILE):
+    csv_file = open(LOG_FILE, "a")
     logwriter = DictWriter(
         csv_file,
         fieldnames=[
@@ -94,7 +94,7 @@ if path.exists("log.csv"):
         ],
     )
 else:
-    csv_file = open("log.csv", "w")
+    csv_file = open(LOG_FILE, "w")
     logwriter = DictWriter(
         csv_file,
         fieldnames=[

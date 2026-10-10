@@ -6,12 +6,14 @@ services:
       context: .
       dockerfile: .devcontainer/Dockerfile
     volumes:
-      - .:/app
+      - .:/app:ro
+      - uploads:/app/static/uploads
     ports:
       - "5999:5999"
     environment:
       - TRAIL_ADMIN_ACCESS_TOKEN=${TRAIL_ADMIN_ACCESS_TOKEN}
       - TRAIL_CONFIG=${TRAIL_CONFIG:-config.py}
+      - TRAIL_LOG_FILE=/app/static/uploads/qrtrail.log
       - MAPBOX_TOKEN=${MAPBOX_TOKEN}
 
 #   zrok:
@@ -49,5 +51,6 @@ services:
 #   zrok_token:
 #     environment: ZROK_TOKEN
 
-# volumes:
+volumes:
+  uploads:
 #   zrok-data:

@@ -6,7 +6,7 @@ A simple Flask web app for a QR code picture trail. Participants scan QR codes p
 - **Trail** (`/trail`): progress tracking per participant session, with a human-readable session ID (e.g. `ambitious-turaco-of-joviality`) and a data consent prompt before taking part.
 - **Photo uploads**: PNG, JPG, JPEG and GIF up to 16 MB, automatically rescaled to a maximum of 1024x1024 px. Photos are stored per session in `static/uploads/<session-id>/` together with a `trail.json` record of found items and photos.
 - **Reset**: `/?reset=1` clears the current session and starts a new one.
-- **Logging**: every QR scan is appended to `log.csv`, which can be downloaded via `/log`.
+- **Logging**: every QR scan is appended to a log file, `TRAIL_LOG_FILE` (default: `/tmp/qrtrail.log`), which can be downloaded via `/log`.
 - **Admin pages** (token protected):
   - `/qrs`: printable QR codes for all trail items.
   - `/gallery`: paginated gallery of all sessions and photos, with options to delete single photos or all sessions.
