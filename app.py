@@ -716,8 +716,41 @@ def draw_qr_vector(pdf, url, x, y, size):
                 pdf.rect(x + col * cell, y + size - (row + 1) * cell, cell, cell, stroke=0, fill=1)
 
 
-def build_posters_pdf(base_url):
-    """One A4 poster per trail item, with a large QR code."""
+def poster_image(image_path, max_px=600):
+    """Small JPEG copy of a picture; draft() decodes at reduced size to keep memory low."""
+    with Image.open(image_path) as img:
+        img.draft("RGB", (max_px, max_px))
+        img = img.convert("RGB")
+        img.thumbnail((max_px, max_px))
+        data = io.BytesIO()
+        img.save(data, "JPEG", quality=85)
+    data.seek(0)
+    return data
+
+
+poster_lock = threading.Lock()
+
+
+def posters_pdf_path(base_url):
+    """Build the poster PDF once per config and base URL, cached on disk."""
+    import hashlib
+    import tempfile
+
+    key = json.dumps([base_url, app_data["name"], app_data.get("description"), app_data.get("data_consent"),
+                      app_data["id_dict"], get_theme()["accent"]], sort_keys=True, default=str)
+    cache_dir = path.join(tempfile.gettempdir(), "qrtrail-posters")
+    makedirs(cache_dir, exist_ok=True)
+    pdf_path = path.join(cache_dir, hashlib.sha1(key.encode()).hexdigest() + ".pdf")
+    with poster_lock:
+        if not path.isfile(pdf_path):
+            partial = pdf_path + ".part"
+            build_posters_pdf(base_url, partial)
+            os.replace(partial, pdf_path)
+    return pdf_path
+
+
+def build_posters_pdf(base_url, output):
+    """One A4 poster per trail item, written to output (a path or file object)."""
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER
     from reportlab.lib.pagesizes import A4
@@ -750,8 +783,7 @@ def build_posters_pdf(base_url):
     box_h = consent_h + 6 * mm
     how_y = margin + box_h + 5 * mm
 
-    buffer = io.BytesIO()
-    pdf = canvas.Canvas(buffer, pagesize=A4, pageCompression=1)
+    pdf = canvas.Canvas(output, pagesize=A4, pageCompression=1)
     pdf.setTitle(f"{app_data['name']} posters")
     pdf.setAuthor(app_data.get("author", ""))
 
@@ -773,12 +805,13 @@ def build_posters_pdf(base_url):
 
         image_path = path.join(app.static_folder, item["image"] + ".jpg")
         if path.isfile(image_path):
-            image = ImageReader(image_path)
+            image = ImageReader(poster_image(image_path))
             image_w, image_h = image.getSize()
             draw_h = 30 * mm
             draw_w = min(image_w * draw_h / image_h, text_width)
             y -= draw_h
-            pdf.drawImage(image, (width - draw_w) / 2, y, draw_w, draw_h, preserveAspectRatio=True, mask="auto")
+            pdf.drawImage(image, (width - draw_w) / 2, y, draw_w, draw_h, preserveAspectRatio=True)
+            del image
             y -= 4 * mm
 
         item_text = Paragraph(poster_markup(item.get("text", "")), item_style)
@@ -812,7 +845,6 @@ def build_posters_pdf(base_url):
         pdf.showPage()
 
     pdf.save()
-    return buffer.getvalue()
 
 
 @app.route("/contact")
@@ -877,7 +909,7 @@ def qr_posters_pdf():
 
     filename = re.sub(r"[^a-z0-9]+", "-", app_data["project_name"].lower()).strip("-") + "-posters.pdf"
     return send_file(
-        io.BytesIO(build_posters_pdf(public_base_url(request))),
+        posters_pdf_path(public_base_url(request)),
         mimetype="application/pdf",
         as_attachment=True,
         download_name=filename,

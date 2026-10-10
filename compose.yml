@@ -1,6 +1,7 @@
 services:
   qrtrail:
     restart: unless-stopped
+    mem_limit: ${TRAIL_MEM_LIMIT:-256m}
     image: lcas.lincoln.ac.uk/mhanheide/qrtrail:sfytrail
     build: 
       context: .
