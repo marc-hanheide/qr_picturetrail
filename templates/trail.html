@@ -53,7 +53,13 @@
                 <button type="button" class="btn btn-info ms-2" id="switchQrCameraBtn">
                     <i class="bi bi-arrow-repeat"></i> Switch Camera
                 </button>
+                <button type="button" class="btn btn-warning ms-2" id="qrFlashBtn" style="display: none;">
+                    <i class="bi bi-lightbulb"></i> <span>Light on</span>
+                </button>
             </div>
+            <p class="small text-muted mt-2 mb-0" id="qrFlashHint" style="display: none;">
+                <i class="bi bi-lightbulb"></i> Too dark to scan? Turn on your phone's torch from its quick settings or Control Centre, or ask someone to shine a light on the code.
+            </p>
         </div>
         
         <!-- Scanner feedback -->
@@ -334,6 +340,15 @@ const closeQrScannerBtn = document.getElementById('closeQrScannerBtn');
 const switchQrCameraBtn = document.getElementById('switchQrCameraBtn');
 const qrScannerButtonContainer = document.getElementById('qrScannerButtonContainer');
 const qrScannerFeedback = document.getElementById('qrScannerFeedback');
+const qrFlashBtn = document.getElementById('qrFlashBtn');
+
+// Only shown when the active camera has a torch (not supported on iPhones)
+async function updateQrFlashButton() {
+    const available = qrScanner ? await qrScanner.hasFlash().catch(() => false) : false;
+    qrFlashBtn.style.display = available ? 'inline-block' : 'none';
+    document.getElementById('qrFlashHint').style.display = qrScanner && !available ? 'block' : 'none';
+    qrFlashBtn.querySelector('span').textContent = available && qrScanner.isFlashOn() ? 'Light off' : 'Light on';
+}
 
 // Function to show QR scanner feedback
 function showQrFeedback(message, type = 'info') {
@@ -439,6 +454,7 @@ if (openQrScannerBtn) {
             // camera labels are only available once permission is granted
             const cameras = await QrScanner.listCameras();
             switchQrCameraBtn.style.display = cameras.length < 2 ? 'none' : 'inline-block';
+            await updateQrFlashButton();
         } catch (error) {
             console.error('Error accessing camera for QR scanner:', error);
             qrScannerContainer.style.display = 'none';
@@ -472,7 +488,20 @@ if (switchQrCameraBtn) {
             console.error('Error switching QR scanner camera:', error);
             showQrFeedback('Could not switch camera. Only one camera may be available.', 'warning');
         }
+        await updateQrFlashButton();
         switchQrCameraBtn.disabled = false;
+    });
+}
+
+if (qrFlashBtn) {
+    qrFlashBtn.addEventListener('click', async function() {
+        if (!qrScanner) return;
+        try {
+            await qrScanner.toggleFlash();
+        } catch (error) {
+            console.error('Error toggling flashlight:', error);
+        }
+        await updateQrFlashButton();
     });
 }
 
