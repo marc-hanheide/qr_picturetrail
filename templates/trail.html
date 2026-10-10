@@ -1,7 +1,9 @@
 {% extends 'layout.html' %}
 
 {% set id_dict = app_data['id_dict'] %}
-{% set complete = items_found == items_total %}
+{% set complete = items_found >= items_required %}
+{% set all_found = items_found == items_total %}
+{% set partial = items_required < items_total %}
 {% set has_geo = id_dict.values()|selectattr('lat', 'defined')|list|length > 0 %}
 {% set ns = namespace(next=None) %}
 {% set explorer_name = session['id']|replace('-', ' ')|title %}
@@ -151,7 +153,7 @@ body.no-scroll { overflow: hidden; }
 /* complete */
 .complete-card { text-align: center; }
 .trophy { font-size: 3rem; line-height: 1; margin-bottom: 8px; }
-.certificate { display: block; width: 100%; border-radius: 12px; margin: 12px 0; }
+#todoTitle { scroll-margin-top: 90px; }
 
 /* bottom bar */
 .bottom-bar {
@@ -202,12 +204,12 @@ body.no-scroll { overflow: hidden; }
         <div class="topbar-title">{{ app_data['project_name'] }}</div>
         <div class="explorer">You are <strong>{{ explorer_name }}</strong></div>
     </div>
-    <div class="progress-pill" role="img" aria-label="{{ items_found }} of {{ items_total }} places found">
+    <div class="progress-pill" role="img" aria-label="{{ items_found }} of {{ items_required }} places found">
         <svg class="ring" viewBox="0 0 36 36" aria-hidden="true">
             <circle class="ring-bg" cx="18" cy="18" r="15"/>
-            <circle class="ring-fg" cx="18" cy="18" r="15" stroke-dasharray="{{ '%.2f'|format(94.25 * items_found / items_total) }} 94.25"{% if items_found == 0 %} hidden{% endif %}/>
+            <circle class="ring-fg" cx="18" cy="18" r="15" stroke-dasharray="{{ '%.2f'|format(94.25 * [items_found, items_required]|min / items_required) }} 94.25"{% if items_found == 0 %} hidden{% endif %}/>
         </svg>
-        <span><strong>{{ items_found }}</strong>/{{ items_total }}</span>
+        <span><strong>{{ items_found }}</strong>/{{ items_total if items_found > items_required else items_required }}</span>
     </div>
 </header>
 
@@ -225,6 +227,9 @@ body.no-scroll { overflow: hidden; }
     {% if items_found == 0 and not found %}
     <section class="card-x">
         <h1>{{ app_data['name'] }}</h1>
+        {% if partial %}
+        <p class="muted">Find any <strong>{{ items_required }}</strong> of the {{ items_total }} places to complete the trail.</p>
+        {% endif %}
         <ol class="steps">
             <li><span>1</span>Find a poster on the trail</li>
             <li><span>2</span>Scan its QR code</li>
@@ -279,16 +284,22 @@ body.no-scroll { overflow: hidden; }
     {% if complete %}
     <section class="card-x complete-card">
         <div class="trophy">🏆</div>
+        {% if all_found %}
         <h1>You found all {{ items_total }} places!</h1>
+        {% else %}
+        <h1>You completed the trail!</h1>
+        <p class="muted mb-1">You found {{ items_found }} of the {{ items_total }} places.</p>
+        {% endif %}
         <p class="muted mb-1">Amazing work! Show your explorer name to a trail judge:</p>
         <div class="explorer-name-big">{{ explorer_name }}</div>
-        {% if 'certificate.png'|file_exists %}
-        <a href="{{ url_for('static', filename='certificate.pdf') }}" target="_blank" rel="noopener">
-            <img class="certificate" src="{{ url_for('static', filename='certificate.png') }}" alt="Your certificate">
-        </a>
-        <a class="btn-x btn-primary-x" href="{{ url_for('static', filename='certificate.pdf') }}" target="_blank" rel="noopener"><i class="bi bi-download"></i> Download your certificate</a>
-        {% endif %}
-        <button type="button" class="btn-x btn-ghost-x mt-2" data-bs-toggle="modal" data-bs-target="#startOverModal"><i class="bi bi-arrow-repeat"></i> Start over with a new trail</button>
+        <div class="stack mt-3">
+            <a class="btn-x btn-primary-x" href="{{ url_for('certificate') }}" target="_blank" rel="noopener"><i class="bi bi-award-fill"></i> View your certificate</a>
+            <a class="btn-x btn-ghost-x" href="{{ url_for('certificate', download=1) }}"><i class="bi bi-download"></i> Download certificate (PDF)</a>
+            {% if not all_found %}
+            <a class="btn-x btn-ghost-x" href="#todoTitle"><i class="bi bi-compass"></i> Keep exploring, {{ items_total - items_found }} more to find</a>
+            {% endif %}
+            <button type="button" class="btn-x btn-link-x" data-bs-toggle="modal" data-bs-target="#startOverModal"><i class="bi bi-arrow-repeat"></i> Start over with a new trail</button>
+        </div>
     </section>
     {% elif ns.next and (not found or just_uploaded) %}
     {% set nxt = id_dict[ns.next] %}
@@ -307,9 +318,17 @@ body.no-scroll { overflow: hidden; }
     </section>
     {% endif %}
 
-    {% if not complete %}
+    {% if not all_found %}
     <section aria-labelledby="todoTitle">
+        {% if complete %}
+        <h2 class="section-title" id="todoTitle">Keep exploring <span class="count">{{ items_total - items_found }}</span></h2>
+        <p class="muted mx-1 mb-0">You've got your certificate, but there are still more places to discover if you like.</p>
+        {% elif partial %}
+        <h2 class="section-title" id="todoTitle">Find {{ items_required - items_found }} more <span class="count">{{ items_total - items_found }} left</span></h2>
+        <p class="muted mx-1 mb-0">Any of these places count.</p>
+        {% else %}
         <h2 class="section-title" id="todoTitle">Still to find <span class="count">{{ items_total - items_found }}</span></h2>
+        {% endif %}
         {% if has_geo %}
         <div id="geoControls" class="notice mt-2" hidden>
             <span id="geoStatus"></span>

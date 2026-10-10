@@ -23,6 +23,7 @@ For the live map and distances (see [config-WEL26.py](config-WEL26.py)):
 
 - each `id_dict` entry needs `lat` and `lon` (decimal degrees), and may set `near_text` (message when very close) and `photo_side` (`top`, `bottom`, `left` or `right`, to stop nearby photos overlapping on the map);
 - `map` sets the Mapbox `style`, `center`, `zoom`, `bounds`, `pitch`, `bearing`, `label_opacity`, `photo_size` and `stats_position`;
+- `required_places` (optional) is how many places a participant must find to complete the trail and get the certificate. Defaults to all places; when lower, the trail page asks for "any N of the M places" and lets people keep exploring after completing.
 - `proximity` sets the distance `tiers` (`max_distance`, `text`, `highlight`, `vibrate`), `far_text`, `hysteresis_m` and `update_interval_s`. Texts may use `{title}` and `{distance}`.
 - `theme` (optional) sets the trail page colours: `bg`, `surface`, `surface_2`, `text`, `muted`, `accent`, `accent_text`, `success`, `info`, `danger`. Missing keys fall back to the defaults in `DEFAULT_THEME` in [app.py](app.py).
 

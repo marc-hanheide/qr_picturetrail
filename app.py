@@ -446,6 +446,7 @@ class StatsTracker:
 
     def snapshot(self):
         total_items = len(app_data['id_dict'])
+        required = get_required_places()
         cutoff = time.time() - self.RECENT_WINDOW_S
         with self._lock:
             while self._recent and self._recent[0] < cutoff:
@@ -457,7 +458,7 @@ class StatsTracker:
             return {
                 'sessions': sum(1 for found in self._sessions.values() if found),
                 'checkins': sum(per_place.values()),
-                'completed': sum(1 for found in self._sessions.values() if len(found) >= total_items),
+                'completed': sum(1 for found in self._sessions.values() if len(found) >= required),
                 'photos': self._photos,
                 'total_places': total_items,
                 'per_place': per_place,
@@ -475,6 +476,15 @@ DEFAULT_PROXIMITY = {
     "far_text": "{distance} away",
     "tiers": [],
 }
+
+
+def get_required_places():
+    """Places needed for the certificate: 'required_places' from the config, else all."""
+    total = len(app_data["id_dict"])
+    try:
+        return max(1, min(int(app_data.get("required_places", total)), total))
+    except (TypeError, ValueError):
+        return total
 
 
 def get_proximity_config():
@@ -665,10 +675,207 @@ def trail():
         found=id if id in app_data["id_dict"] else "",
         items_found=items_found,
         items_total=items_total,
+        items_required=get_required_places(),
         proximity=get_proximity_config(),
         theme=get_theme(),
         photos_by_item=get_session_photos(session["id"]),
         just_uploaded=just_uploaded and id in app_data["id_dict"],
+    )
+
+
+def local_time(iso_ts):
+    """Parse a stored UTC timestamp into the trail's local time zone (config 'timezone')."""
+    from zoneinfo import ZoneInfo
+    try:
+        moment = datetime.fromisoformat(iso_ts)
+    except (TypeError, ValueError):
+        moment = datetime.now(timezone.utc)
+    try:
+        return moment.astimezone(ZoneInfo(app_data.get("timezone", "Europe/London")))
+    except Exception:
+        return moment
+
+
+def format_duration(seconds):
+    minutes = max(1, int(seconds // 60))
+    return f"{minutes} min" if minutes < 60 else f"{minutes // 60} h {minutes % 60:02d} min"
+
+
+def draw_star(pdf, cx, cy, radius, colour):
+    import math
+    star = pdf.beginPath()
+    for k in range(10):
+        r = radius if k % 2 == 0 else radius * 0.45
+        angle = math.pi / 2 + k * math.pi / 5
+        point = (cx + r * math.cos(angle), cy + r * math.sin(angle))
+        star.moveTo(*point) if k == 0 else star.lineTo(*point)
+    star.close()
+    pdf.setFillColor(colour)
+    pdf.drawPath(star, stroke=0, fill=1)
+
+
+def build_certificate_pdf(output, explorer_name, visits, photo_count, completed_at, started_at):
+    """Landscape A4 certificate; visits is a list of (item_id, local datetime) in the order found."""
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    from reportlab.pdfgen import canvas
+    from reportlab.platypus import Paragraph
+
+    width, height = landscape(A4)
+    theme = get_theme()
+    navy = colors.HexColor(theme["bg"])
+    gold = colors.HexColor(theme["accent"])
+    cream = colors.HexColor("#fff8e6")
+    muted = colors.HexColor("#5a6075")
+    total = len(app_data["id_dict"])
+
+    pdf = canvas.Canvas(output, pagesize=(width, height), pageCompression=1)
+    pdf.setTitle(f"{app_data['name']} certificate for {explorer_name}")
+    pdf.setAuthor(app_data.get("author", ""))
+
+    # frame and corner stars
+    pdf.setStrokeColor(gold)
+    pdf.setLineWidth(5)
+    pdf.roundRect(12 * mm, 12 * mm, width - 24 * mm, height - 24 * mm, 6 * mm, stroke=1, fill=0)
+    pdf.setStrokeColor(navy)
+    pdf.setLineWidth(0.8)
+    pdf.roundRect(16 * mm, 16 * mm, width - 32 * mm, height - 32 * mm, 4 * mm, stroke=1, fill=0)
+    for cx, cy in [(24, 24), (width / mm - 24, 24), (24, height / mm - 24), (width / mm - 24, height / mm - 24)]:
+        draw_star(pdf, cx * mm, cy * mm, 4.5 * mm, gold)
+
+    # heading
+    y = height - 32 * mm
+    heading = app_data["name"].upper()
+    spacing = 2
+    heading_w = stringWidth(heading, "Helvetica-Bold", 11) + spacing * (len(heading) - 1)
+    text = pdf.beginText((width - heading_w) / 2, y)
+    text.setFont("Helvetica-Bold", 11)
+    text.setCharSpace(spacing)
+    text.setFillColor(muted)
+    text.textOut(heading)
+    text.setCharSpace(0)  # PDF character spacing persists beyond this text object
+    pdf.drawText(text)
+
+    y -= 17 * mm
+    title = "Certificate of Achievement"
+    pdf.setFillColor(navy)
+    pdf.setFont("Times-Bold", 38)
+    pdf.drawCentredString(width / 2, y, title)
+    title_w = stringWidth(title, "Times-Bold", 38)
+    draw_star(pdf, (width - title_w) / 2 - 11 * mm, y + 4.5 * mm, 5 * mm, gold)
+    draw_star(pdf, (width + title_w) / 2 + 11 * mm, y + 4.5 * mm, 5 * mm, gold)
+
+    y -= 11 * mm
+    pdf.setFillColor(muted)
+    pdf.setFont("Helvetica", 13)
+    pdf.drawCentredString(width / 2, y, "This certificate is proudly presented to")
+
+    y -= 16 * mm
+    pdf.setFillColor(navy)
+    pdf.setFont("Times-BoldItalic", 34)
+    pdf.drawCentredString(width / 2, y, explorer_name)
+    name_w = stringWidth(explorer_name, "Times-BoldItalic", 34)
+    pdf.setStrokeColor(gold)
+    pdf.setLineWidth(2)
+    pdf.line((width - name_w) / 2 - 10 * mm, y - 4 * mm, (width + name_w) / 2 + 10 * mm, y - 4 * mm)
+
+    found_text = f"finding all {total} places" if len(visits) >= total else f"finding {len(visits)} of the {total} places"
+    sentence = Paragraph(
+        f"for {found_text} on the <b>{html.escape(app_data['name'])}</b>, "
+        f"completed on <b>{completed_at.strftime('%-d %B %Y')}</b>.",
+        ParagraphStyle("sentence", fontName="Helvetica", fontSize=13, leading=17, textColor=navy, alignment=TA_CENTER),
+    )
+    _, sentence_h = sentence.wrap(width - 80 * mm, height)
+    y -= 9 * mm + sentence_h
+    sentence.drawOn(pdf, 40 * mm, y)
+
+    # places discovered (left) and statistics (right)
+    section_top = y - 10 * mm
+    left_x = 28 * mm
+    stats_x = width - 28 * mm - 78 * mm
+    pdf.setFillColor(navy)
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(left_x, section_top, "Places discovered")
+    pdf.drawString(stats_x, section_top, "Your trail in numbers")
+
+    row_h = 11 * mm
+    rows_per_col = max(1, int((section_top - 6 * mm - 32 * mm) // row_h))
+    col_w = (stats_x - left_x - 8 * mm) / 2
+    for index, (item_id, found_at) in enumerate(visits):
+        col, row = divmod(index, rows_per_col)
+        if col > 1:
+            break
+        x = left_x + col * col_w
+        row_y = section_top - 6 * mm - (row + 1) * row_h
+        item = app_data["id_dict"][item_id]
+        image_path = path.join(app.static_folder, item["image"] + ".jpg")
+        if path.isfile(image_path):
+            pdf.drawImage(ImageReader(poster_image(image_path, 160)), x, row_y + 1 * mm, 9 * mm, 9 * mm)
+        else:
+            draw_star(pdf, x + 4.5 * mm, row_y + 5.5 * mm, 4 * mm, gold)
+        pdf.setFillColor(navy)
+        pdf.setFont("Helvetica-Bold", 11)
+        pdf.drawString(x + 12 * mm, row_y + 6 * mm, item["title"])
+        pdf.setFillColor(muted)
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(x + 12 * mm, row_y + 2 * mm, f"found at {found_at.strftime('%H:%M')}")
+
+    tiles = [
+        (f"{len(visits)} of {total}", "places found"),
+        (str(photo_count), "photo shared" if photo_count == 1 else "photos shared"),
+        (format_duration((completed_at - started_at).total_seconds()), "to complete the trail"),
+    ]
+    tile_h = 19 * mm
+    for index, (value, label) in enumerate(tiles):
+        tile_y = section_top - 6 * mm - (index + 1) * (tile_h + 3 * mm) + 3 * mm
+        pdf.setFillColor(cream)
+        pdf.setStrokeColor(gold)
+        pdf.setLineWidth(1)
+        pdf.roundRect(stats_x, tile_y, 78 * mm, tile_h, 3 * mm, stroke=1, fill=1)
+        pdf.setFillColor(navy)
+        pdf.setFont("Times-Bold", 22)
+        pdf.drawString(stats_x + 6 * mm, tile_y + 7 * mm, value)
+        pdf.setFillColor(muted)
+        pdf.setFont("Helvetica", 10)
+        pdf.drawRightString(stats_x + 72 * mm, tile_y + 8 * mm, label)
+
+    pdf.setFillColor(muted)
+    pdf.setFont("Helvetica-Oblique", 9)
+    pdf.drawCentredString(width / 2, 20 * mm, f"Well done, explorer! {app_data.get('html_title', app_data['name'])}")
+    pdf.showPage()
+    pdf.save()
+
+
+@app.route("/certificate.pdf")
+def certificate():
+    initialise_session()
+    session_data = load_session_data(session["id"])
+    found = session_data.get("items_found", {})
+    visits = sorted(
+        ((item_id, local_time(info.get("found_at"))) for item_id, info in found.items()
+         if item_id in app_data["id_dict"] and session.get("found_" + item_id)),
+        key=lambda visit: visit[1],
+    )
+    required = get_required_places()
+    if len(visits) < required:
+        return redirect(url_for("trail"))
+
+    photo_count = sum(len(urls) for urls in get_session_photos(session["id"]).values())
+    explorer_name = session["id"].replace("-", " ").title()
+    output = io.BytesIO()
+    build_certificate_pdf(output, explorer_name, visits, photo_count,
+                          completed_at=visits[required - 1][1], started_at=visits[0][1])
+    output.seek(0)
+    return send_file(
+        output,
+        mimetype="application/pdf",
+        as_attachment=bool(request.args.get("download")),
+        download_name=f"certificate-{session['id']}.pdf",
     )
 
 
@@ -737,7 +944,7 @@ def posters_pdf_path(base_url):
     import tempfile
 
     key = json.dumps([base_url, app_data["name"], app_data.get("description"), app_data.get("data_consent"),
-                      app_data["id_dict"], get_theme()["accent"]], sort_keys=True, default=str)
+                      app_data["id_dict"], get_theme()["accent"], get_required_places()], sort_keys=True, default=str)
     cache_dir = path.join(tempfile.gettempdir(), "qrtrail-posters")
     makedirs(cache_dir, exist_ok=True)
     pdf_path = path.join(cache_dir, hashlib.sha1(key.encode()).hexdigest() + ".pdf")
@@ -770,10 +977,12 @@ def build_posters_pdf(base_url, output):
     item_style = ParagraphStyle("item", fontName="Helvetica", fontSize=12.5, leading=16, textColor=dark, alignment=TA_CENTER)
     small = ParagraphStyle("small", fontName="Helvetica", fontSize=7.5, leading=9.5, textColor=muted)
     total = len(app_data["id_dict"])
+    required = get_required_places()
+    find_text = f"Find all {total} posters" if required >= total else f"Find any {required} of the {total} posters"
 
     how_to = Paragraph(
         f"<b>How to take part:</b> {poster_markup(app_data.get('description', ''))}<br/><br/>"
-        f"<b>1.</b> Scan the QR code with your phone camera &#183; <b>2.</b> Find all {total} posters "
+        f"<b>1.</b> Scan the QR code with your phone camera &#183; <b>2.</b> {find_text} "
         f"&#183; <b>3.</b> Try the photo challenge (optional)",
         body,
     )
