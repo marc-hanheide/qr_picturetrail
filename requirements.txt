@@ -7,3 +7,4 @@ black
 coolname
 itsdangerous
 python-dotenv
+reportlab

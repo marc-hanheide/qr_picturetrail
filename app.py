@@ -9,6 +9,8 @@ https://github.com/petersimeth/basic-flask-template
 
 # Standard library imports
 import re
+import io
+import html
 import json
 import os
 import queue
@@ -681,28 +683,158 @@ def get_base_url(req):
     return get_protocol(req) + "://" + req.headers.get("Host") + "/"
 
 
+def public_base_url(req):
+    """Base URL encoded in QR codes; TRAIL_PUBLIC_URL wins so printing from localhost still works."""
+    configured = os.environ.get("TRAIL_PUBLIC_URL", "").strip()
+    return configured.rstrip("/") + "/" if configured else get_base_url(req)
+
+
+def make_qr_image(url):
+    import qrcode
+    return qrcode.make(url, error_correction=qrcode.constants.ERROR_CORRECT_M, border=2).get_image().convert("RGB")
+
+
+def poster_markup(text):
+    """Escape config text for ReportLab paragraphs, keeping <b>, <i> and <br>."""
+    text = html.escape(text or "", quote=False)
+    text = re.sub(r"&lt;(/?)(b|i)&gt;", r"<\1\2>", text)
+    return re.sub(r"&lt;br\s*/?&gt;", "<br/>", text)
+
+
+def draw_qr_vector(pdf, url, x, y, size):
+    """Vector QR code, sharp at any print size."""
+    import qrcode
+    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+    matrix = qr.get_matrix()
+    cell = size / len(matrix)
+    pdf.setFillColorRGB(0, 0, 0)
+    for row, cells in enumerate(matrix):
+        for col, dark in enumerate(cells):
+            if dark:
+                pdf.rect(x + col * cell, y + size - (row + 1) * cell, cell, cell, stroke=0, fill=1)
+
+
+def build_posters_pdf(base_url):
+    """One A4 poster per trail item, with a large QR code."""
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas
+    from reportlab.platypus import Paragraph
+
+    width, height = A4
+    margin = 15 * mm
+    text_width = width - 2 * margin
+    dark = colors.HexColor("#14182a")
+    muted = colors.HexColor("#555b70")
+    accent = colors.HexColor(get_theme()["accent"])
+    body = ParagraphStyle("body", fontName="Helvetica", fontSize=10.5, leading=13.5, textColor=dark, alignment=TA_CENTER)
+    item_style = ParagraphStyle("item", fontName="Helvetica", fontSize=12.5, leading=16, textColor=dark, alignment=TA_CENTER)
+    small = ParagraphStyle("small", fontName="Helvetica", fontSize=7.5, leading=9.5, textColor=muted)
+    total = len(app_data["id_dict"])
+
+    how_to = Paragraph(
+        f"<b>How to take part:</b> {poster_markup(app_data.get('description', ''))}<br/><br/>"
+        f"<b>1.</b> Scan the QR code with your phone camera &#183; <b>2.</b> Find all {total} posters "
+        f"&#183; <b>3.</b> Try the photo challenge (optional)",
+        body,
+    )
+    consent = Paragraph(f"<b>Your photos &amp; privacy:</b> {poster_markup(app_data.get('data_consent', ''))}", small)
+    _, how_h = how_to.wrap(text_width, height)
+    _, consent_h = consent.wrap(text_width - 8 * mm, height)
+    box_h = consent_h + 6 * mm
+    how_y = margin + box_h + 5 * mm
+
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4, pageCompression=1)
+    pdf.setTitle(f"{app_data['name']} posters")
+    pdf.setAuthor(app_data.get("author", ""))
+
+    for number, (item_id, item) in enumerate(app_data["id_dict"].items(), 1):
+        url = base_url + "trail?id=" + item_id
+
+        # top down: header, picture and the item's text
+        pdf.setFillColor(accent)
+        pdf.rect(0, height - 8 * mm, width, 8 * mm, stroke=0, fill=1)
+        y = height - 19 * mm
+        pdf.setFillColor(muted)
+        pdf.setFont("Helvetica-Bold", 15)
+        pdf.drawCentredString(width / 2, y, app_data["name"])
+        y -= 14 * mm
+        pdf.setFillColor(dark)
+        pdf.setFont("Helvetica-Bold", 36)
+        pdf.drawCentredString(width / 2, y, item["title"])
+        y -= 4 * mm
+
+        image_path = path.join(app.static_folder, item["image"] + ".jpg")
+        if path.isfile(image_path):
+            image = ImageReader(image_path)
+            image_w, image_h = image.getSize()
+            draw_h = 30 * mm
+            draw_w = min(image_w * draw_h / image_h, text_width)
+            y -= draw_h
+            pdf.drawImage(image, (width - draw_w) / 2, y, draw_w, draw_h, preserveAspectRatio=True, mask="auto")
+            y -= 4 * mm
+
+        item_text = Paragraph(poster_markup(item.get("text", "")), item_style)
+        _, text_h = item_text.wrap(text_width, height)
+        y -= text_h
+        item_text.drawOn(pdf, margin, y)
+
+        # bottom up: consent box and how to take part
+        pdf.setStrokeColor(colors.HexColor("#c9cdd8"))
+        pdf.roundRect(margin, margin, text_width, box_h, 3 * mm, stroke=1, fill=0)
+        consent.drawOn(pdf, margin + 4 * mm, margin + 3 * mm)
+        how_to.drawOn(pdf, margin, how_y)
+
+        # the QR code fills the space in between, with its labels below it
+        labels_h = 15 * mm
+        space_top = y - 5 * mm
+        space_bottom = how_y + how_h + 4 * mm
+        qr_size = max(60 * mm, min(120 * mm, space_top - space_bottom - labels_h))
+        qr_y = space_top - qr_size - max(0, (space_top - space_bottom - labels_h - qr_size) / 2)
+        draw_qr_vector(pdf, url, (width - qr_size) / 2, qr_y, qr_size)
+        pdf.setFillColor(dark)
+        pdf.setFont("Helvetica-Bold", 16)
+        pdf.drawCentredString(width / 2, qr_y - 7 * mm, "Scan me with your phone camera!")
+        pdf.setFillColor(muted)
+        pdf.setFont("Helvetica", 9)
+        pdf.drawCentredString(width / 2, qr_y - 12 * mm, url)
+
+        pdf.setFillColor(muted)
+        pdf.setFont("Helvetica", 8)
+        pdf.drawRightString(width - margin, margin / 2, f"{number} / {total}")
+        pdf.showPage()
+
+    pdf.save()
+    return buffer.getvalue()
+
+
 @app.route("/contact")
 def contact():
     return render_template("contact.html", app_data=app_data)
 
 
 def qr_png(url):
-    import qrcode, io
-
     image = io.BytesIO()
-    qrcode.make(url).save(image, "PNG")
+    make_qr_image(url).save(image, "PNG")
     image.seek(0)
     return send_file(image, mimetype="image/png")
 
 
 @app.route("/qr/<id>")
 def qr(id):
-    return qr_png(get_base_url(request) + "trail?id=" + id)
+    return qr_png(public_base_url(request) + "trail?id=" + id)
 
 
 @app.route("/qr-join")
 def qr_join():
-    return qr_png(get_base_url(request) + "trail")
+    return qr_png(public_base_url(request) + "trail")
 
 
 @app.route("/log")
@@ -723,8 +855,32 @@ def qrs():
         response = set_admin_auth_cookie(response)
         return response
     
+    places = get_map_places()
+    for place in places:
+        place['qr'] = url_for('qr', id=place['id'])
+
     return render_template(
-        "qrs.html", app_data=app_data, base_url=get_base_url(request)
+        "qrs.html",
+        app_data=app_data,
+        base_url=public_base_url(request),
+        places=places,
+        map_config=app_data.get("map", {}),
+        mapbox_token=os.environ.get("MAPBOX_TOKEN", ""),
+    )
+
+
+@app.route("/qrs/posters.pdf")
+def qr_posters_pdf():
+    is_authenticated, _ = check_admin_access()
+    if not is_authenticated:
+        return "Access denied. Valid admin token required.", 403
+
+    filename = re.sub(r"[^a-z0-9]+", "-", app_data["project_name"].lower()).strip("-") + "-posters.pdf"
+    return send_file(
+        io.BytesIO(build_posters_pdf(public_base_url(request))),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=filename,
     )
 
 
@@ -747,7 +903,7 @@ def live_map():
         app_data=app_data,
         map_config=app_data["map"],
         mapbox_token=os.environ.get("MAPBOX_TOKEN", ""),
-        join_url=get_base_url(request) + "trail",
+        join_url=public_base_url(request) + "trail",
     )
 
 

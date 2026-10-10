@@ -15,6 +15,7 @@ services:
       - TRAIL_CONFIG=${TRAIL_CONFIG:-config.py}
       - TRAIL_LOG_FILE=/app/static/uploads/qrtrail.log
       - MAPBOX_TOKEN=${MAPBOX_TOKEN}
+      - TRAIL_PUBLIC_URL=${TRAIL_PUBLIC_URL:-}
 
 #   zrok:
 #     profiles: [zrok]
