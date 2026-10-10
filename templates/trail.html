@@ -288,6 +288,7 @@ body.no-scroll { overflow: hidden; }
         </a>
         <a class="btn-x btn-primary-x" href="{{ url_for('static', filename='certificate.pdf') }}" target="_blank" rel="noopener"><i class="bi bi-download"></i> Download your certificate</a>
         {% endif %}
+        <button type="button" class="btn-x btn-ghost-x mt-2" data-bs-toggle="modal" data-bs-target="#startOverModal"><i class="bi bi-arrow-repeat"></i> Start over with a new trail</button>
     </section>
     {% elif ns.next and (not found or just_uploaded) %}
     {% set nxt = id_dict[ns.next] %}
