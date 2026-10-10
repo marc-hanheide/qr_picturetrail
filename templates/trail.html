@@ -1,8 +1,8 @@
 {% extends 'layout.html' %}
 
 {% block body %}
-<!-- QR Scanner Library -->
-<script src="https://unpkg.com/qr-scanner@1.4.2/qr-scanner.umd.min.js"></script>
+<!-- QR Scanner Library, self-hosted so it can load its worker file from the same origin -->
+<script src="{{ url_for('static', filename='vendor/qr-scanner/qr-scanner.umd.min.js') }}"></script>
 
 <!-- Simple navigation -->
 <!-- <nav class="navbar navbar-expand-lg navbar-light bg-light mb-3">
@@ -31,11 +31,18 @@
         <p>Scan a QR code you found to unlock a location on the trail.</p>
         
         <!-- Scanner button -->
-        <div class="mb-3" id="qrScannerButtonContainer">
+        <div class="mb-3" id="qrScannerButtonContainer" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
             <button type="button" class="btn btn-info" id="openQrScannerBtn">
                 <i class="bi bi-qr-code-scan"></i> Open QR Scanner
             </button>
+            <button type="button" class="btn btn-outline-info" id="qrPhotoBtn">
+                <i class="bi bi-camera"></i> Take a photo of the QR code
+            </button>
+            <input type="file" id="qrPhotoInput" accept="image/*" capture="environment" style="display: none;">
         </div>
+        <p class="small text-muted mb-2">
+            <i class="bi bi-lightbulb"></i> Tip: your phone's own camera app can scan the QR codes too. Just point it at the code and tap the link. Your progress is kept as long as the link opens in this same browser.
+        </p>
         
         <!-- QR Scanner video element (hidden initially) -->
         <div id="qrScannerContainer" style="display: none;" class="mb-3">
@@ -180,11 +187,13 @@
     {% endif %}
     {% set has_geo = app_data['id_dict'].values()|selectattr('lat', 'defined')|list|length > 0 %}
     {% if has_geo %}
-    <div id="geoControls" class="my-3">
-        <button type="button" class="btn btn-warning" id="enableGeoBtn">
-            <i class="bi bi-geo-alt"></i> Show how far away the places are
-        </button>
-        <div id="geoStatus" class="small text-muted mt-1"></div>
+    <div id="geoControls" class="my-3" style="display:none;">
+        <div class="alert alert-warning mb-0 d-flex flex-wrap align-items-center gap-2">
+            <span id="geoStatus"></span>
+            <button type="button" class="btn btn-warning btn-sm" id="enableGeoBtn" style="display:none;">
+                <i class="bi bi-geo-alt"></i> Share my location
+            </button>
+        </div>
     </div>
     <div id="nearBanner" class="alert alert-success shadow" role="status"
          style="display:none; position:fixed; top:12px; left:12px; right:12px; z-index:1080; font-size:1.1rem;"></div>
@@ -299,6 +308,11 @@
                 <div class="consent-content">
                     {{ app_data['data_consent']|safe }}
                 </div>
+                {% if has_geo %}
+                <div class="alert alert-info mt-3 mb-0">
+                    <i class="bi bi-geo-alt"></i> Next, your browser will ask to use your location, so we can show how far away each place is. Your location stays on your device and is never sent to us.
+                </div>
+                {% endif %}
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-success" id="acceptConsentBtn">
@@ -375,118 +389,84 @@ function handleQrResult(result) {
     
     // Hide scanner UI
     qrScannerContainer.style.display = 'none';
-    qrScannerButtonContainer.style.display = 'block';
+    qrScannerButtonContainer.style.display = 'flex';
     
-    // Show success message
-    showQrFeedback('QR code scanned successfully! Redirecting...', 'success');
-    
-    // Redirect to the scanned URL after a short delay
-    setTimeout(() => {
-        window.location.href = scannedUrl;
-    }, 1500);
+    showQrFeedback('QR code found! Opening...', 'success');
+    window.location.href = scannedUrl;
 }
 
-// Function to start QR scanner
+// Larger, sharper scan region than the library default helps with small or distant codes
+function qrScanRegion(video) {
+    const size = Math.round(Math.min(video.videoWidth, video.videoHeight) * 0.85);
+    return {
+        x: Math.round((video.videoWidth - size) / 2),
+        y: Math.round((video.videoHeight - size) / 2),
+        width: size,
+        height: size,
+        downScaledWidth: 600,
+        downScaledHeight: 600,
+    };
+}
+
 async function startQrScanner(facingMode = qrCurrentFacingMode) {
+    if (qrScanner) {
+        await qrScanner.setCamera(facingMode);
+        qrCurrentFacingMode = facingMode;
+        return;
+    }
+    qrScanner = new QrScanner(qrScannerVideo, handleQrResult, {
+        returnDetailedScanResult: true,
+        preferredCamera: facingMode,
+        highlightScanRegion: true,
+        highlightCodeOutline: true,
+        maxScansPerSecond: 15,
+        calculateScanRegion: qrScanRegion,
+    });
     try {
-        // Get available video devices
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter(device => device.kind === 'videoinput');
-        
-        let scannerOptions = {
-            returnDetailedScanResult: true,
-            highlightScanRegion: true,
-            highlightCodeOutline: true,
-            maxScansPerSecond: 5,
-        };
-        
-        // If specific devices are available, try to use them
-        if (videoDevices.length > 1) {
-            // Try to find specific camera by facing mode
-            const backCamera = videoDevices.find(device => 
-                device.label.toLowerCase().includes('back') || 
-                device.label.toLowerCase().includes('rear') ||
-                device.label.toLowerCase().includes('environment')
-            );
-            const frontCamera = videoDevices.find(device => 
-                device.label.toLowerCase().includes('front') || 
-                device.label.toLowerCase().includes('user') ||
-                device.label.toLowerCase().includes('facing')
-            );
-            
-            if (facingMode === 'environment' && backCamera) {
-                scannerOptions.preferredCamera = backCamera.deviceId;
-            } else if (facingMode === 'user' && frontCamera) {
-                scannerOptions.preferredCamera = frontCamera.deviceId;
-            } else {
-                scannerOptions.preferredCamera = facingMode;
-            }
-        } else {
-            // Fall back to facing mode constraint
-            scannerOptions.preferredCamera = facingMode;
-        }
-        
-        // Initialize QR Scanner
-        qrScanner = new QrScanner(qrScannerVideo, handleQrResult, scannerOptions);
-        
-        // Start scanning
         await qrScanner.start();
         qrCurrentFacingMode = facingMode;
-        
-        showQrFeedback('Scanner ready. Point your camera at a QR code.', 'info');
-        
     } catch (error) {
-        console.error('Error starting QR scanner:', error);
-        
-        // Try alternative camera if the preferred one fails
-        if (facingMode === 'environment') {
-            try {
-                qrScanner = new QrScanner(
-                    qrScannerVideo,
-                    handleQrResult,
-                    {
-                        returnDetailedScanResult: true,
-                        preferredCamera: 'user',
-                        highlightScanRegion: true,
-                        highlightCodeOutline: true,
-                        maxScansPerSecond: 5,
-                    }
-                );
-                await qrScanner.start();
-                qrCurrentFacingMode = 'user';
-                showQrFeedback('Scanner ready with front camera. Point your camera at a QR code.', 'info');
-            } catch (fallbackError) {
-                throw new Error('Could not access any camera');
-            }
-        } else {
-            throw new Error('Could not access camera');
-        }
+        qrScanner.destroy();
+        qrScanner = null;
+        throw error;
     }
 }
 
 // Open QR scanner
 if (openQrScannerBtn) {
     openQrScannerBtn.addEventListener('click', async function() {
+        qrScannerFeedback.style.display = 'none';
+        qrScannerContainer.style.display = 'block';
+        qrScannerButtonContainer.style.display = 'none';
         try {
-            qrScannerFeedback.style.display = 'none';
-            
-            // Check available cameras first
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const videoDevices = devices.filter(device => device.kind === 'videoinput');
-            
-            // Hide switch button if only one camera is available
-            if (videoDevices.length < 2) {
-                switchQrCameraBtn.style.display = 'none';
-            } else {
-                switchQrCameraBtn.style.display = 'inline-block';
-            }
-            
             await startQrScanner();
-            qrScannerContainer.style.display = 'block';
-            qrScannerButtonContainer.style.display = 'none';
+            // camera labels are only available once permission is granted
+            const cameras = await QrScanner.listCameras();
+            switchQrCameraBtn.style.display = cameras.length < 2 ? 'none' : 'inline-block';
         } catch (error) {
             console.error('Error accessing camera for QR scanner:', error);
-            showQrFeedback('Could not access camera. Please check permissions and try again.', 'danger');
+            qrScannerContainer.style.display = 'none';
+            qrScannerButtonContainer.style.display = 'flex';
+            showQrFeedback('Could not access the camera. Please check permissions, or use "Take a photo of the QR code".', 'danger');
+        }
+    });
+}
+
+// Scan a QR code from a photo taken with the phone's own camera app
+const qrPhotoBtn = document.getElementById('qrPhotoBtn');
+const qrPhotoInput = document.getElementById('qrPhotoInput');
+if (qrPhotoBtn) {
+    qrPhotoBtn.addEventListener('click', () => qrPhotoInput.click());
+    qrPhotoInput.addEventListener('change', async function() {
+        const file = this.files && this.files[0];
+        this.value = '';
+        if (!file) return;
+        showQrFeedback('Reading the QR code...', 'info');
+        try {
+            const result = await QrScanner.scanImage(file, { returnDetailedScanResult: true, alsoTryWithoutScanRegion: true });
+            handleQrResult(result);
+        } catch (error) {
+            showQrFeedback('No QR code found in the photo. Please try again, with the code filling more of the picture.', 'warning');
         }
     });
 }
@@ -495,11 +475,11 @@ if (openQrScannerBtn) {
 if (closeQrScannerBtn) {
     closeQrScannerBtn.addEventListener('click', function() {
         if (qrScanner) {
-            qrScanner.stop();
+            qrScanner.destroy();
             qrScanner = null;
         }
         qrScannerContainer.style.display = 'none';
-        qrScannerButtonContainer.style.display = 'block';
+        qrScannerButtonContainer.style.display = 'flex';
         qrScannerFeedback.style.display = 'none';
     });
 }
@@ -508,55 +488,14 @@ if (closeQrScannerBtn) {
 if (switchQrCameraBtn) {
     switchQrCameraBtn.addEventListener('click', async function() {
         const newFacingMode = qrCurrentFacingMode === 'environment' ? 'user' : 'environment';
-        
-        // Show loading state
-        switchQrCameraBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Switching...';
         switchQrCameraBtn.disabled = true;
-        
         try {
-            // Stop current scanner completely
-            if (qrScanner) {
-                await qrScanner.stop();
-                qrScanner.destroy();
-                qrScanner = null;
-            }
-            
-            // Wait a moment for camera to be released
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Check if the desired camera is available
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const videoDevices = devices.filter(device => device.kind === 'videoinput');
-            
-            if (videoDevices.length < 2) {
-                throw new Error('Only one camera available');
-            }
-            
-            // Try to start with new camera
             await startQrScanner(newFacingMode);
-            
-            // Reset button
-            switchQrCameraBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Switch Camera';
-            switchQrCameraBtn.disabled = false;
-            
-            showQrFeedback(`Switched to ${newFacingMode === 'environment' ? 'back' : 'front'} camera`, 'success');
-            
         } catch (error) {
             console.error('Error switching QR scanner camera:', error);
-            
-            // Try to restart with the original camera
-            try {
-                await startQrScanner(qrCurrentFacingMode);
-                showQrFeedback('Could not switch camera. Only one camera may be available.', 'warning');
-            } catch (restartError) {
-                console.error('Error restarting original camera:', restartError);
-                showQrFeedback('Error switching camera. Please close and reopen the scanner.', 'danger');
-            }
-            
-            // Reset button
-            switchQrCameraBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Switch Camera';
-            switchQrCameraBtn.disabled = false;
+            showQrFeedback('Could not switch camera. Only one camera may be available.', 'warning');
         }
+        switchQrCameraBtn.disabled = false;
     });
 }
 
@@ -660,7 +599,8 @@ function fillTemplate(text, vars) {
 
 function initProximity() {
     const btn = document.getElementById('enableGeoBtn');
-    if (!btn) return;
+    if (!btn) return () => {};
+    const controls = document.getElementById('geoControls');
     const statusEl = document.getElementById('geoStatus');
     const banner = document.getElementById('nearBanner');
     const tbody = document.getElementById('placesTable');
@@ -670,12 +610,17 @@ function initProximity() {
     const interval = (PROXIMITY.update_interval_s || 5) * 1000;
     const tierState = new Map();
     const announced = new Set();
-    let watchId = null, active = false, lastReorder = 0, reorderTimer = null, bannerTimer = null;
+    let watchId = null, active = false, retried = false, lastReorder = 0, reorderTimer = null, bannerTimer = null;
+
+    function showNotice(text, withButton) {
+        statusEl.textContent = text;
+        btn.style.display = withButton ? '' : 'none';
+        controls.style.display = '';
+    }
 
     if (!('geolocation' in navigator) || !window.isSecureContext) {
-        btn.style.display = 'none';
-        statusEl.textContent = 'Distances are not available on this device or connection.';
-        return;
+        showNotice("Distances to the places can't be shown on this device or connection.", false);
+        return () => {};
     }
 
     // the current tier gets extra slack so messages don't flicker at the boundary
@@ -724,7 +669,7 @@ function initProximity() {
     function update(pos) {
         const { latitude, longitude, accuracy } = pos.coords;
         const rough = accuracy > 50;
-        statusEl.textContent = `Location found (accurate to about ${Math.round(accuracy)} m).`;
+        controls.style.display = 'none';
 
         rows.forEach(row => {
             const box = row.querySelector('.proximity');
@@ -770,41 +715,34 @@ function initProximity() {
     function start() {
         if (watchId !== null) return;
         active = true;
-        localStorage.setItem('trailGeo', 'on');
-        btn.style.display = 'none';
-        if (!statusEl.textContent.startsWith('Location found')) statusEl.textContent = 'Finding your location…';
         watchId = navigator.geolocation.watchPosition(update, err => {
-            if (err.code === err.PERMISSION_DENIED) {
-                stop();
-                active = false;
-                localStorage.removeItem('trailGeo');
-                btn.style.display = '';
-                statusEl.textContent = 'Location permission was denied, so distances cannot be shown.';
-            } else {
-                statusEl.textContent = 'Waiting for a location fix…';
-            }
+            if (err.code !== err.PERMISSION_DENIED) return;  // timeouts etc. resolve themselves
+            stop();
+            active = false;
+            showNotice("Distances to the places can't be shown because your device's location isn't shared."
+                + (retried ? ' If no question popped up, allow location for this site in your browser settings and try again.' : ''), true);
         }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
     }
 
-    btn.addEventListener('click', start);
+    btn.addEventListener('click', () => { retried = true; start(); });
     // save battery while the page is in the background
     document.addEventListener('visibilitychange', () => {
         if (!active) return;
         if (document.hidden) stop(); else start();
     });
 
-    // resume automatically after scanning a QR code, but never prompt without a tap
-    if (localStorage.getItem('trailGeo') === 'on' && navigator.permissions) {
-        navigator.permissions.query({ name: 'geolocation' })
-            .then(p => { if (p.state === 'granted') start(); })
-            .catch(() => {});
-    }
+    return start;
 }
+
+let startProximity = () => {};
 
 // Load photos when the page loads
 document.addEventListener('DOMContentLoaded', function() {
     loadSessionPhotos();
-    initProximity();
+    startProximity = initProximity();
+    {% if session.get('consent_given') %}
+    startProximity();
+    {% endif %}
     
     // Check if consent modal should be shown
     {% if not session.get('consent_given') %}
@@ -828,7 +766,7 @@ function stopQrScannerIfActive() {
         qrScanner.stop();
         qrScanner = null;
         qrScannerContainer.style.display = 'none';
-        qrScannerButtonContainer.style.display = 'block';
+        qrScannerButtonContainer.style.display = 'flex';
         qrScannerFeedback.style.display = 'none';
     }
 }
@@ -1142,6 +1080,7 @@ if (acceptConsentBtn) {
                 // Hide the modal
                 const consentModal = bootstrap.Modal.getInstance(document.getElementById('consentModal'));
                 consentModal.hide();
+                startProximity();
             } else {
                 throw new Error('Failed to save consent');
             }
