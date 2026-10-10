@@ -4,6 +4,7 @@
 {% set complete = items_found == items_total %}
 {% set has_geo = id_dict.values()|selectattr('lat', 'defined')|list|length > 0 %}
 {% set ns = namespace(next=None) %}
+{% set explorer_name = session['id']|replace('-', ' ')|title %}
 {% for item in id_dict %}{% if not session['found_' + item] and ns.next is none %}{% set ns.next = item %}{% endif %}{% endfor %}
 
 {% macro place_image(item, cls) -%}
@@ -57,6 +58,10 @@ body.no-scroll { overflow: hidden; }
     border-bottom: 1px solid var(--line);
 }
 .topbar-title { flex: 1; min-width: 0; font-weight: 800; font-size: 1.05rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-text { flex: 1; min-width: 0; }
+.explorer { font-size: 0.8rem; color: var(--muted); line-height: 1.25; }
+.explorer strong { color: var(--accent); font-size: 1.02rem; font-weight: 800; }
+.explorer-name-big { display: inline-block; margin: 6px 0 4px; padding: 8px 16px; border-radius: 12px; background: var(--surface-2); color: var(--accent); font-size: 1.3rem; font-weight: 800; }
 .progress-pill { display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px; border-radius: 999px; background: var(--surface); font-size: 0.95rem; white-space: nowrap; }
 .ring { width: 32px; height: 32px; transform: rotate(-90deg); }
 .ring circle { fill: none; stroke-width: 4; }
@@ -193,13 +198,16 @@ body.no-scroll { overflow: hidden; }
 
 {% block main %}
 <header class="topbar">
-    <div class="topbar-title">{{ app_data['project_name'] }}</div>
+    <div class="topbar-text">
+        <div class="topbar-title">{{ app_data['project_name'] }}</div>
+        <div class="explorer">You are <strong>{{ explorer_name }}</strong></div>
+    </div>
     <div class="progress-pill" role="img" aria-label="{{ items_found }} of {{ items_total }} places found">
         <svg class="ring" viewBox="0 0 36 36" aria-hidden="true">
             <circle class="ring-bg" cx="18" cy="18" r="15"/>
             <circle class="ring-fg" cx="18" cy="18" r="15" stroke-dasharray="{{ '%.2f'|format(94.25 * items_found / items_total) }} 94.25"{% if items_found == 0 %} hidden{% endif %}/>
         </svg>
-        <span><strong>{{ items_found }}</strong>/{{ items_total }} found</span>
+        <span><strong>{{ items_found }}</strong>/{{ items_total }}</span>
     </div>
 </header>
 
@@ -272,7 +280,8 @@ body.no-scroll { overflow: hidden; }
     <section class="card-x complete-card">
         <div class="trophy">🏆</div>
         <h1>You found all {{ items_total }} places!</h1>
-        <p class="muted">Amazing work, explorer. Thank you for taking part!</p>
+        <p class="muted mb-1">Amazing work! Show your explorer name to a trail judge:</p>
+        <div class="explorer-name-big">{{ explorer_name }}</div>
         {% if 'certificate.png'|file_exists %}
         <a href="{{ url_for('static', filename='certificate.pdf') }}" target="_blank" rel="noopener">
             <img class="certificate" src="{{ url_for('static', filename='certificate.png') }}" alt="Your certificate">
@@ -363,7 +372,6 @@ body.no-scroll { overflow: hidden; }
 
     <footer class="trail-footer">
         <button type="button" class="link-btn" data-bs-toggle="modal" data-bs-target="#privacyModal">Privacy &amp; consent</button>
-        <span>Trail ID: <code>{{ session['id'] }}</code></span>
         <button type="button" class="link-btn danger" data-bs-toggle="modal" data-bs-target="#startOverModal">Start over</button>
     </footer>
 </main>
@@ -413,6 +421,8 @@ body.no-scroll { overflow: hidden; }
                 <h5 class="modal-title fw-bold" id="consentModalLabel">👋 Welcome!</h5>
             </div>
             <div class="modal-body pt-0">
+                <p class="mb-1">Your explorer name for today is</p>
+                <div class="explorer-name-big mt-0 mb-3">{{ explorer_name }}</div>
                 <p>{{ app_data['description'] }}</p>
                 <div class="hint-label">Your photos &amp; privacy</div>
                 <p class="small">{{ app_data['data_consent']|safe }}</p>
