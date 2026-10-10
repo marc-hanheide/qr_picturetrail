@@ -1,981 +1,918 @@
 {% extends 'layout.html' %}
 
-{% block body %}
-<!-- QR Scanner Library -->
-<script src="https://unpkg.com/qr-scanner@1.4.2/qr-scanner.umd.min.js"></script>
+{% set id_dict = app_data['id_dict'] %}
+{% set complete = items_found == items_total %}
+{% set has_geo = id_dict.values()|selectattr('lat', 'defined')|list|length > 0 %}
+{% set ns = namespace(next=None) %}
+{% set explorer_name = session['id']|replace('-', ' ')|title %}
+{% for item in id_dict %}{% if not session['found_' + item] and ns.next is none %}{% set ns.next = item %}{% endif %}{% endfor %}
 
-<!-- Simple navigation -->
-<!-- <nav class="navbar navbar-expand-lg navbar-light bg-light mb-3">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="/trail">{{ app_data['project_name'] }}</a>
-        <div class="navbar-nav ms-auto">
-            <a class="nav-link" href="/trail"><i class="bi bi-map"></i> Trail</a>
-            <a class="nav-link" href="/gallery"><i class="bi bi-camera"></i> Gallery</a>
-            <a class="nav-link" href="/qrs"><i class="bi bi-qr-code"></i> QR Codes</a>
-        </div>
+{% macro place_image(item, cls) -%}
+    {%- set img = id_dict[item]['image'] + '.jpg' -%}
+    {%- if img|file_exists -%}
+        <img class="{{ cls }}" src="{{ url_for('static', filename=img) }}" alt="" loading="lazy">
+    {%- else -%}
+        <div class="{{ cls }} placeholder" aria-hidden="true"><i class="bi bi-stars"></i></div>
+    {%- endif -%}
+{%- endmacro %}
+
+{% block bodyattrs %}class="trail-page" data-bs-theme="dark"{% endblock %}
+
+{% block head %}
+<meta name="theme-color" content="{{ theme['bg'] }}">
+<style>
+:root {
+    --bg: {{ theme['bg'] }};
+    --surface: {{ theme['surface'] }};
+    --surface-2: {{ theme['surface_2'] }};
+    --text: {{ theme['text'] }};
+    --muted: {{ theme['muted'] }};
+    --accent: {{ theme['accent'] }};
+    --accent-text: {{ theme['accent_text'] }};
+    --success: {{ theme['success'] }};
+    --info: {{ theme['info'] }};
+    --danger: {{ theme['danger'] }};
+    --radius: 18px;
+    --line: rgba(255, 255, 255, 0.08);
+}
+[hidden] { display: none !important; }
+body.trail-page {
+    margin: 0; min-height: 100vh; color: var(--text);
+    background:
+        radial-gradient(900px 500px at 50% -180px, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%),
+        var(--bg);
+    background-attachment: fixed;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px; line-height: 1.45; -webkit-font-smoothing: antialiased;
+}
+body.no-scroll { overflow: hidden; }
+.trail-page :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* top bar */
+.topbar {
+    position: sticky; top: 0; z-index: 1020;
+    display: flex; align-items: center; gap: 12px;
+    padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+}
+.topbar-title { flex: 1; min-width: 0; font-weight: 800; font-size: 1.05rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-text { flex: 1; min-width: 0; }
+.explorer { font-size: 0.8rem; color: var(--muted); line-height: 1.25; }
+.explorer strong { color: var(--accent); font-size: 1.02rem; font-weight: 800; }
+.explorer-name-big { display: inline-block; margin: 6px 0 4px; padding: 8px 16px; border-radius: 12px; background: var(--surface-2); color: var(--accent); font-size: 1.3rem; font-weight: 800; }
+.progress-pill { display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px; border-radius: 999px; background: var(--surface); font-size: 0.95rem; white-space: nowrap; }
+.ring { width: 32px; height: 32px; transform: rotate(-90deg); }
+.ring circle { fill: none; stroke-width: 4; }
+.ring-bg { stroke: rgba(255, 255, 255, 0.12); }
+.ring-fg { stroke: var(--accent); stroke-linecap: round; }
+
+/* layout */
+.trail-main { max-width: 560px; margin: 0 auto; padding: 16px 16px calc(112px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 16px; }
+.card-x { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); }
+.card-x h1 { font-size: 1.6rem; font-weight: 800; margin: 0 0 12px; line-height: 1.2; }
+.card-x h2 { font-size: 1.3rem; font-weight: 800; margin: 0; }
+.eyebrow { font-size: 0.78rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+.eyebrow.success { color: var(--success); }
+.muted { color: var(--muted); }
+
+/* intro */
+.steps { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 10px; }
+.steps li { display: flex; align-items: center; gap: 12px; font-weight: 600; }
+.steps span { flex: 0 0 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-text); font-weight: 800; }
+
+/* found card */
+.found-card {
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+    box-shadow: 0 10px 40px color-mix(in srgb, var(--accent) 22%, transparent);
+    animation: popIn 0.5s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.found-img, .uploaded-photo { display: block; width: 100%; max-height: 170px; object-fit: cover; border-radius: 12px; margin-bottom: 14px; }
+.uploaded-photo { max-height: 320px; }
+.found-img.placeholder { display: none; }
+.challenge { background: var(--surface-2); border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+
+/* buttons */
+.btn-x {
+    display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
+    min-height: 52px; padding: 12px 18px; border-radius: 14px; border: none;
+    font-size: 1.05rem; font-weight: 700; text-decoration: none; cursor: pointer;
+    transition: transform 0.1s, filter 0.2s;
+}
+.btn-x:active { transform: scale(0.98); }
+.btn-x:disabled { opacity: 0.6; }
+.btn-primary-x { background: var(--accent); color: var(--accent-text); box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 35%, transparent); }
+.btn-ghost-x { background: transparent; color: var(--text); border: 1.5px solid rgba(255, 255, 255, 0.22); }
+.btn-link-x { background: transparent; color: var(--muted); min-height: 44px; font-weight: 600; font-size: 0.98rem; text-decoration: underline; }
+.optional-note { margin: 0 0 10px; color: var(--muted); font-size: 0.9rem; text-align: center; }
+.stack { display: grid; gap: 10px; }
+.photo-preview img { display: block; width: 100%; max-height: 360px; object-fit: contain; border-radius: 12px; background: #000; margin-bottom: 10px; }
+
+/* next place */
+.next-row { display: flex; gap: 14px; align-items: center; }
+.next-img { width: 72px; height: 72px; border-radius: 14px; object-fit: cover; flex: 0 0 auto; background: var(--surface-2); }
+.next-img.placeholder, .place-thumb.placeholder { display: grid; place-items: center; color: var(--accent); font-size: 1.5rem; }
+.next-card.changed { animation: popIn 0.4s ease-out; }
+.pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; margin-top: 6px; border-radius: 999px; background: var(--surface-2); font-size: 0.85rem; font-weight: 700; }
+.hint-label { font-size: 0.75rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 14px 0 2px; }
+.hint { margin: 0; }
+.proximity-msg { border-radius: 10px; padding: 8px 12px; margin-top: 12px; font-weight: 600; font-size: 0.95rem; }
+.tone-success { background: color-mix(in srgb, var(--success) 18%, transparent); color: var(--success); }
+.tone-warning { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.tone-info, .tone-primary { background: color-mix(in srgb, var(--info) 18%, transparent); color: var(--info); }
+.tone-danger { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
+
+/* place list */
+.section-title { display: flex; align-items: center; gap: 8px; margin: 8px 4px 0; font-size: 1.1rem; font-weight: 800; }
+.count { background: var(--surface-2); border-radius: 999px; padding: 1px 10px; font-size: 0.85rem; }
+.place-list { display: flex; flex-direction: column; gap: 10px; }
+.place-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.place-head { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 72px; padding: 12px; background: none; border: none; color: inherit; text-align: left; }
+.place-thumb { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; flex: 0 0 auto; background: var(--surface-2); }
+.place-main { flex: 1; min-width: 0; }
+.place-title { font-weight: 700; font-size: 1.05rem; }
+.chevron { color: var(--muted); transition: transform 0.25s; }
+.place-head[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+.place-card > .proximity-msg { margin: 0 12px 12px; }
+.place-body { padding: 0 14px 14px; }
+.place-body .hint-label { margin-top: 0; }
+.found-label { color: var(--success); font-weight: 600; font-size: 0.9rem; }
+.photo-strip { display: flex; gap: 8px; overflow-x: auto; padding: 0 12px 12px; }
+.photo-thumb { flex: 0 0 auto; width: 64px; height: 64px; padding: 0; border-radius: 10px; overflow: hidden; border: 2px solid rgba(255, 255, 255, 0.15); background: none; }
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.found-section summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.found-section summary::-webkit-details-marker { display: none; }
+.found-section[open] summary .chevron { transform: rotate(180deg); }
+.found-section .place-list { margin-top: 10px; }
+.notice { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); font-size: 0.95rem; }
+.notice .btn-x { width: auto; min-height: 44px; font-size: 0.95rem; padding: 8px 14px; }
+
+/* complete */
+.complete-card { text-align: center; }
+.trophy { font-size: 3rem; line-height: 1; margin-bottom: 8px; }
+.certificate { display: block; width: 100%; border-radius: 12px; margin: 12px 0; }
+
+/* bottom bar */
+.bottom-bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 1030;
+    padding: 20px 16px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, var(--bg) 55%, transparent);
+}
+.bottom-bar .btn-x { max-width: 528px; margin: 0 auto; min-height: 58px; font-size: 1.15rem; }
+.bottom-bar .btn-ghost-x { background: var(--surface-2); }
+
+/* scanner */
+.scanner-sheet { position: fixed; inset: 0; z-index: 1060; display: flex; flex-direction: column; background: #000; color: #fff; }
+.scanner-top { display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top)) 12px 10px; }
+.scanner-title { flex: 1; text-align: center; font-weight: 700; }
+.scanner-tools { display: flex; gap: 8px; min-width: 44px; justify-content: flex-end; }
+.icon-btn { width: 44px; height: 44px; border-radius: 50%; border: none; display: grid; place-items: center; background: rgba(255, 255, 255, 0.16); color: #fff; font-size: 1.2rem; }
+.icon-btn.on { background: var(--accent); color: var(--accent-text); }
+.scanner-video-wrap { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.scanner-video-wrap video { width: 100%; height: 100%; object-fit: cover; }
+.scanner-tips { display: grid; gap: 6px; padding: 14px 18px calc(16px + env(safe-area-inset-bottom)); text-align: center; font-size: 0.95rem; color: #ddd; }
+.scanner-tips .muted { font-size: 0.85rem; }
+
+/* toasts and banner */
+.toasts { position: fixed; top: calc(64px + env(safe-area-inset-top)); left: 12px; right: 12px; z-index: 1080; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+.toast-x, .near-banner { width: 100%; max-width: 528px; padding: 12px 16px; border-radius: 14px; font-weight: 600; background: var(--surface-2); color: var(--text); border-left: 4px solid var(--info); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); pointer-events: auto; animation: toastIn 0.35s ease-out; }
+.toast-x.success, .near-banner { border-color: var(--success); }
+.toast-x.warning { border-color: var(--accent); }
+.toast-x.danger, .toast-x.error { border-color: var(--danger); }
+.near-banner { position: fixed; top: calc(64px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: calc(100% - 24px); z-index: 1085; font-size: 1.1rem; }
+
+/* footer */
+.trail-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 16px; margin-top: 8px; color: var(--muted); font-size: 0.85rem; }
+.link-btn { background: none; border: none; color: var(--muted); text-decoration: underline; min-height: 44px; padding: 8px 4px; }
+.link-btn.danger { color: var(--danger); }
+.trail-page .modal-content { background: var(--surface); border-radius: var(--radius); }
+
+@keyframes popIn { from { opacity: 0; transform: scale(0.95); } }
+@keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } }
+@media (prefers-reduced-motion: reduce) {
+    .trail-page *, .trail-page *::before, .trail-page *::after { animation: none !important; transition: none !important; }
+}
+</style>
+{% endblock %}
+
+{% block main %}
+<header class="topbar">
+    <div class="topbar-text">
+        <div class="topbar-title">{{ app_data['project_name'] }}</div>
+        <div class="explorer">You are <strong>{{ explorer_name }}</strong></div>
     </div>
-</nav> -->
-
-<div class="mt-4 p-5 bg-primary text-white text-center rounded">
-    <h1>{{ app_data['name'] }}</h1>
-    <p class="lead">Welcome to our interactive trail. Find the {{ items_total }} locations.</p>
-    <p class="mb-0 text-center">Your unique ID: <strong><code class="text-light">{{ session['id'] }}</code></strong></p>
-</div>
-
-<!-- QR Scanner Section -->
-<div class="card mt-3">
-    <div class="card-header bg-info text-white">
-        <h5><i class="bi bi-qr-code-scan"></i> QR Code Scanner</h5>
+    <div class="progress-pill" role="img" aria-label="{{ items_found }} of {{ items_total }} places found">
+        <svg class="ring" viewBox="0 0 36 36" aria-hidden="true">
+            <circle class="ring-bg" cx="18" cy="18" r="15"/>
+            <circle class="ring-fg" cx="18" cy="18" r="15" stroke-dasharray="{{ '%.2f'|format(94.25 * items_found / items_total) }} 94.25"{% if items_found == 0 %} hidden{% endif %}/>
+        </svg>
+        <span><strong>{{ items_found }}</strong>/{{ items_total }}</span>
     </div>
-    <div class="card-body">
-        <p>Scan a QR code you found to unlock a location on the trail.</p>
-        
-        <!-- Scanner button -->
-        <div class="mb-3" id="qrScannerButtonContainer">
-            <button type="button" class="btn btn-info" id="openQrScannerBtn">
-                <i class="bi bi-qr-code-scan"></i> Open QR Scanner
-            </button>
-        </div>
-        
-        <!-- QR Scanner video element (hidden initially) -->
-        <div id="qrScannerContainer" style="display: none;" class="mb-3">
-            <div class="text-center mb-2">
-                <small class="text-muted">Point your camera at a QR code</small>
-            </div>
-            <video id="qrScannerVideo" width="100%" height="300" style="border-radius: 8px; border: 2px solid #ddd;"></video>
-            <div class="mt-2">
-                <button type="button" class="btn btn-secondary" id="closeQrScannerBtn">
-                    <i class="bi bi-x"></i> Close Scanner
-                </button>
-                <button type="button" class="btn btn-info ms-2" id="switchQrCameraBtn">
-                    <i class="bi bi-arrow-repeat"></i> Switch Camera
-                </button>
-            </div>
-        </div>
-        
-        <!-- Scanner feedback -->
-        <div id="qrScannerFeedback" style="display: none;" class="alert" role="alert">
-            <!-- Feedback messages will appear here -->
-        </div>
-    </div>
-</div>
+</header>
 
-<!-- Flash messages for photo upload feedback -->
-{% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
+<div id="toasts" class="toasts" aria-live="polite">
+    {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}
-            <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
+            <div class="toast-x {{ category }}" role="status">{{ message }}</div>
         {% endfor %}
+    {% endwith %}
+</div>
+{% if has_geo %}<div id="nearBanner" class="near-banner" role="status" hidden></div>{% endif %}
+
+<main class="trail-main">
+
+    {% if items_found == 0 and not found %}
+    <section class="card-x">
+        <h1>{{ app_data['name'] }}</h1>
+        <ol class="steps">
+            <li><span>1</span>Find a poster on the trail</li>
+            <li><span>2</span>Scan its QR code</li>
+            <li><span>3</span>Do the fun photo challenge</li>
+        </ol>
+    </section>
     {% endif %}
-{% endwith %}
 
-{% if found %}
-        
-        <!-- Photo upload section -->
-        <div class="card mt-3">
-            <div class="card-header bg-success text-white">
-                <h5>Hooray! You have found <i>{{ app_data['id_dict'][found]['title'] }}</i>!</h5>
-            </div>
-            <div class="card-body">
+    {% if found %}
+    {% set place = id_dict[found] %}
+    {% set my_photos = photos_by_item.get(found, []) %}
+    <section class="card-x found-card" aria-labelledby="foundTitle">
+        {% if just_uploaded %}
+            <div class="eyebrow success"><i class="bi bi-check-circle-fill"></i> Photo uploaded</div>
+            <h1 id="foundTitle">Great photo!</h1>
+            {% if my_photos %}<img class="uploaded-photo" src="{{ my_photos[-1] }}" alt="Your photo at {{ place['title'] }}">{% endif %}
+        {% else %}
+            <div class="eyebrow">🎉 You found it!</div>
+            <h1 id="foundTitle">{{ place['title'] }}</h1>
+            {{ place_image(found, 'found-img') }}
+            <div class="challenge">{{ place['text']|safe }}</div>
+        {% endif %}
 
-                <h5>📸 Share Your Discovery!</h5>
-                
-                <h6>Your activitity:</h6>
-                <p><strong>{{ app_data['id_dict'][found]['text']|safe }}</strong></p>
-                
-                <p>Once done, look below for other pictures to search for.</p>
-
-                <!-- Camera buttons -->
-                <div class="mb-3" id="buttonContainer">
-                    <button type="button" class="btn btn-success me-2" id="openCameraBtn">
-                        <i class="bi bi-camera"></i> Open Camera
-                    </button>
-                    <button type="button" class="btn btn-secondary" id="chooseFileBtn">
-                        <i class="bi bi-folder"></i> Choose from Gallery
-                    </button>
-                </div>
-                
-                <!-- Camera video element (hidden initially) -->
-                <div id="cameraContainer" style="display: none;" class="mb-3">
-                    <video id="camera" width="100%" height="300" autoplay playsinline style="border-radius: 8px;"></video>
-                    <canvas id="canvas" style="display: none;"></canvas>
-                    <div class="mt-2">
-                        <button type="button" class="btn btn-primary" id="captureBtn">
-                            <i class="bi bi-camera-fill"></i> Capture Photo
-                        </button>
-                        <button type="button" class="btn btn-info me-2" id="switchCameraBtn">
-                            <i class="bi bi-arrow-repeat"></i> Switch Camera
-                        </button>
-                        <button type="button" class="btn btn-secondary" id="closeCameraBtn">
-                            <i class="bi bi-x"></i> Close Camera
-                        </button>
-                    </div>
-                </div>
-                
-                <!-- Preview area -->
-                <div id="previewContainer" style="display: none;" class="mb-3">
-                    <h6>Preview:</h6>
-                    <img id="preview" src="" alt="Preview" class="img-fluid" style="max-height: 300px; border-radius: 8px;">
-                    <div class="mt-2">
-                        <button type="button" class="btn btn-success" id="confirmUploadBtn">
-                            <i class="bi bi-upload"></i> Upload This Photo
-                        </button>
-                        <button type="button" class="btn btn-secondary" id="retakeBtn">
-                            <i class="bi bi-arrow-clockwise"></i> Retake
-                        </button>
-                    </div>
-                </div>
-                
-                <!-- Traditional file upload form -->
-                <form method="POST" enctype="multipart/form-data" id="photoForm" style="display: none;">
-                    <input type="hidden" name="item_id" value="{{ found }}">
-                    <div class="mb-3">
-                        <label for="photo" class="form-label">Choose a photo:</label>
-                        <input type="file" class="form-control" id="photo" name="photo" accept="image/*">
-                        <div class="form-text">Select a photo from your device.</div>
-                    </div>
-                    <button type="submit" class="btn btn-primary" id="uploadBtn" disabled>
-                        <i class="bi bi-upload"></i> Upload Photo
-                    </button>
-                    <button type="button" class="btn btn-secondary" id="cancelFileBtn">
-                        Cancel
-                    </button>
-                </form>
-                
-                <!-- Hidden form for camera uploads -->
-                <form method="POST" enctype="multipart/form-data" id="cameraForm" style="display: none;">
-                    <input type="hidden" name="item_id" value="{{ found }}">
-                    <input type="file" id="cameraPhoto" name="photo" style="display: none;">
-                </form>
-            </div>
-        </div>
-
-{% endif %}
-
-    {% if items_found == items_total %}
-    <h2>You completed the Trail!</h2>
-        <div class="alert alert-success d-flex align-items-center alert-dismissible fade show" role="alert">
-            <!--<svg class="bi flex-shrink-0 me-2" role="img" aria-label="Success:"><use xlink:href="#check-circle-fill"/></svg>-->
-            <strong>
-                Congratulations! You have found all the locations! 
-                Here is your certificate (click it to download): <br>
-                <a href="../static/certificate.pdf" target="_blank">
-                    <img style="width: 100%;" src="../static/certificate.png" class="img-fluid rounded" alt="certificate" />
+        <div class="photo-flow" data-item-id="{{ found }}">
+            {% if not just_uploaded %}<p class="optional-note">The photo is optional, just for fun.</p>{% endif %}
+            <div class="stack photo-actions">
+                <label class="btn-x {{ 'btn-ghost-x' if just_uploaded else 'btn-primary-x' }}">
+                    <input type="file" accept="image/*" capture="environment" class="photo-input visually-hidden">
+                    <i class="bi bi-camera-fill"></i> {{ 'Add another photo' if just_uploaded or my_photos else 'Take your photo' }}
+                </label>
+                {% if not just_uploaded %}
+                <label class="btn-x btn-ghost-x">
+                    <input type="file" accept="image/*" class="photo-input visually-hidden">
+                    <i class="bi bi-images"></i> Choose from gallery
+                </label>
+                <a class="btn-x btn-link-x" href="{{ url_for('trail') }}">
+                    {{ 'No photo, see my trophy' if complete else 'No photo, show my next place' }} <i class="bi bi-arrow-right"></i>
                 </a>
-                <a href="/?reset=true">Click here to start over.</a>
-            </strong>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                {% endif %}
+            </div>
+            <div class="photo-preview" hidden>
+                <img class="preview-img" alt="Preview of your photo">
+                <div class="stack">
+                    <button type="button" class="btn-x btn-primary-x upload-btn"><i class="bi bi-cloud-arrow-up-fill"></i> Upload photo</button>
+                    <button type="button" class="btn-x btn-ghost-x retake-btn"><i class="bi bi-arrow-counterclockwise"></i> Choose another</button>
+                </div>
+            </div>
         </div>
-    {% else %}
-        <h2>Locations to find</h2>
-        <strong>You have already found {{ items_found }} out of {{ items_total }} locations.</strong>
-        <div class="progress">
-            <div class="progress-bar" role="progressbar" style="width: {{ 100 * items_found / items_total }}%;" aria-valuenow="{{ 100.0 * items_found / items_total }}" aria-valuemin="0" aria-valuemax="100">{{ (100 * items_found // items_total) }}%</div>
-        </div>
-        <p>Find the remaining {{ items_total - items_found }} locations listed below in red and scan their QR Code with your phone.</p> 
-        <p>You can use <a href="https://navigateme.lincoln.ac.uk/" target="_blank">https://navigateme.lincoln.ac.uk/</a> to find your way.</p>
-
+    </section>
     {% endif %}
-    <table class="table table-bordered table-hover" style="vertical-align: middle; ">
-        <thead>
-            <tr>
-                <th style="text-align: center;">Location</th>
-                <th style="text-align: center;">Found it yet?</th>
-            </tr>
-        </thead>
-        <tbody>
-        {% for item in app_data['id_dict'] %}
-            {% if session["found_" + item] %}
-                <tr class="table-success">
-            {% else %}
-                <tr class="table-danger">
-            {% endif %}
-                    <td style="text-align: center;">
-                        <!-- <h4>{{ app_data['id_dict'][item] }}</h4> -->
-                        <h4>{{ app_data['id_dict'][item]['title'] }}</h4>
-                        <p><strong>Where you can find me: </strong><br>{{ app_data['id_dict'][item]['hint']|safe }}</p>
-                        {% set image_filename = app_data['id_dict'][item]['image'] + ".jpg" %}
-                        {% if image_filename|file_exists %}
-                        <img style="width: 50%;" src="../static/{{ app_data['id_dict'][item]['image'] }}.jpg" class="img-fluid rounded float-right" alt="{{ item }}" />
-                        {% endif %}
-                        
-                        <!-- Display user-uploaded photos for this location -->
-                        {% if session["found_" + item] %}
-                            <div class="mt-2">
-                                {% set session_photos = [] %}
-                                {% for photo_file in session_photos %}
-                                    {% if photo_file.endswith('.jpg') or photo_file.endswith('.jpeg') or photo_file.endswith('.png') or photo_file.endswith('.gif') %}
-                                        <img src="../static/uploads/{{ session['id'] }}/{{ photo_file }}" 
-                                             class="photo-thumbnail me-1" 
-                                             style="width: 60px; height: 60px; object-fit: cover; cursor: pointer; border-radius: 4px;" 
-                                             onclick="showPhotoModal('../static/uploads/{{ session['id'] }}/{{ photo_file }}')"
-                                             alt="Your photo at {{ app_data['id_dict'][item]['title'] }}" />
-                                    {% endif %}
-                                {% endfor %}
-                                
-                                <!-- Check for photos by matching item ID in uploaded photos -->
-                                <div id="photos-{{ item }}" class="d-inline-block">
-                                    <!-- Photos will be loaded here by JavaScript -->
-                                </div>
-                            </div>
-                        {% endif %}
-                        
-                    </td>
-                    <td>
-                    {% if session["found_" + item] %}
-                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor" class="bi bi-check" viewBox="0 0 16 16">
-                            <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425z"/>
-                        </svg>
-                        
-                        <!-- Show photo count if any photos exist for this location -->
-                        <div class="mt-1 small text-muted" id="photo-count-{{ item }}">
-                            <!-- Photo count will be shown here -->
-                        </div>
-                    {% else %}
-                        <b>Nope! Go, find it and scan its QR Code!</b>
-                    {% endif %}
-                    </td>
-            </tr>
-        {% endfor %}
-        </tbody>
-                    
-    </table>
 
-    <!-- Start Over Button -->
-<div class="text-center mt-3">
-    <button type="button" class="btn btn-outline-danger btn-sm" id="startOverBtn">
-        <i class="bi bi-arrow-clockwise"></i> Start Over
-    </button>
+    {% if complete %}
+    <section class="card-x complete-card">
+        <div class="trophy">🏆</div>
+        <h1>You found all {{ items_total }} places!</h1>
+        <p class="muted mb-1">Amazing work! Show your explorer name to a trail judge:</p>
+        <div class="explorer-name-big">{{ explorer_name }}</div>
+        {% if 'certificate.png'|file_exists %}
+        <a href="{{ url_for('static', filename='certificate.pdf') }}" target="_blank" rel="noopener">
+            <img class="certificate" src="{{ url_for('static', filename='certificate.png') }}" alt="Your certificate">
+        </a>
+        <a class="btn-x btn-primary-x" href="{{ url_for('static', filename='certificate.pdf') }}" target="_blank" rel="noopener"><i class="bi bi-download"></i> Download your certificate</a>
+        {% endif %}
+        <button type="button" class="btn-x btn-ghost-x mt-2" data-bs-toggle="modal" data-bs-target="#startOverModal"><i class="bi bi-arrow-repeat"></i> Start over with a new trail</button>
+    </section>
+    {% elif ns.next and (not found or just_uploaded) %}
+    {% set nxt = id_dict[ns.next] %}
+    <section class="card-x next-card" id="nextCard" data-item-id="{{ ns.next }}" aria-live="polite">
+        <div class="eyebrow">🧭 Your next place</div>
+        <div class="next-row">
+            <div id="nextImgWrap">{{ place_image(ns.next, 'next-img') }}</div>
+            <div>
+                <h2 id="nextTitle">{{ nxt['title'] }}</h2>
+                <span id="nextDistance" class="pill" hidden></span>
+            </div>
+        </div>
+        <div id="nextMsg" class="proximity-msg" hidden></div>
+        <div class="hint-label">Where to find me</div>
+        <p class="hint" id="nextHint">{{ nxt['hint']|safe }}</p>
+    </section>
+    {% endif %}
+
+    {% if not complete %}
+    <section aria-labelledby="todoTitle">
+        <h2 class="section-title" id="todoTitle">Still to find <span class="count">{{ items_total - items_found }}</span></h2>
+        {% if has_geo %}
+        <div id="geoControls" class="notice mt-2" hidden>
+            <span id="geoStatus"></span>
+            <button type="button" class="btn-x btn-primary-x" id="enableGeoBtn" hidden><i class="bi bi-geo-alt-fill"></i> Share my location</button>
+        </div>
+        {% endif %}
+        <div id="placesList" class="place-list mt-2">
+        {% for item in id_dict if not session['found_' + item] %}
+            {% set place = id_dict[item] %}
+            <article class="place-card"
+                data-item-id="{{ item }}"
+                data-title="{{ place['title'] }}"
+                {% if place['lat'] is defined and place['lon'] is defined %}data-lat="{{ place['lat'] }}" data-lon="{{ place['lon'] }}"{% endif %}
+                {% if place['near_text'] is defined %}data-near-text="{{ place['near_text'] }}"{% endif %}>
+                <button type="button" class="place-head" aria-expanded="false" aria-controls="hint-{{ item }}">
+                    {{ place_image(item, 'place-thumb') }}
+                    <div class="place-main">
+                        <div class="place-title">{{ place['title'] }}</div>
+                        <span class="pill proximity-distance" hidden></span>
+                    </div>
+                    <i class="bi bi-chevron-down chevron" aria-hidden="true"></i>
+                </button>
+                <div class="proximity-msg" hidden></div>
+                <div class="place-body" id="hint-{{ item }}" hidden>
+                    <div class="hint-label">Where to find me</div>
+                    <p class="hint place-hint">{{ place['hint']|safe }}</p>
+                </div>
+            </article>
+        {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if items_found > 0 %}
+    <details class="found-section" {% if complete %}open{% endif %}>
+        <summary class="section-title">Found <span class="count">{{ items_found }}</span> <i class="bi bi-chevron-down chevron ms-auto" aria-hidden="true"></i></summary>
+        <div class="place-list">
+        {% for item in id_dict if session['found_' + item] %}
+            <article class="place-card">
+                <div class="place-head">
+                    {{ place_image(item, 'place-thumb') }}
+                    <div class="place-main">
+                        <div class="place-title">{{ id_dict[item]['title'] }}</div>
+                        <div class="found-label"><i class="bi bi-check-circle-fill"></i> Found{% if photos_by_item.get(item) %} · {{ photos_by_item[item]|length }} photo{{ 's' if photos_by_item[item]|length != 1 }}{% endif %}</div>
+                    </div>
+                </div>
+                {% if photos_by_item.get(item) %}
+                <div class="photo-strip">
+                    {% for url in photos_by_item[item] %}
+                    <button type="button" class="photo-thumb" data-src="{{ url }}" aria-label="Show your photo at {{ id_dict[item]['title'] }}">
+                        <img src="{{ url }}" alt="" loading="lazy">
+                    </button>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </article>
+        {% endfor %}
+        </div>
+    </details>
+    {% endif %}
+
+    <footer class="trail-footer">
+        <button type="button" class="link-btn" data-bs-toggle="modal" data-bs-target="#privacyModal">Privacy &amp; consent</button>
+        <button type="button" class="link-btn danger" data-bs-toggle="modal" data-bs-target="#startOverModal">Start over</button>
+    </footer>
+</main>
+
+<nav class="bottom-bar" aria-label="Main action">
+    {# the photo challenge is the main action right after a scan #}
+    <button type="button" class="btn-x {{ 'btn-ghost-x' if found and not just_uploaded else 'btn-primary-x' }}" id="openQrScannerBtn"><i class="bi bi-qr-code-scan"></i> Scan {{ 'another' if found and not just_uploaded else 'a' }} QR code</button>
+</nav>
+
+<div id="scannerSheet" class="scanner-sheet" role="dialog" aria-modal="true" aria-label="QR code scanner" hidden>
+    <div class="scanner-top">
+        <button type="button" class="icon-btn" id="closeQrScannerBtn" aria-label="Close scanner"><i class="bi bi-x-lg"></i></button>
+        <div class="scanner-title">Scan a QR code</div>
+        <div class="scanner-tools">
+            <button type="button" class="icon-btn" id="qrFlashBtn" aria-label="Turn light on" hidden><i class="bi bi-lightbulb-fill"></i></button>
+            <button type="button" class="icon-btn" id="switchQrCameraBtn" aria-label="Switch camera" hidden><i class="bi bi-arrow-repeat"></i></button>
+        </div>
+    </div>
+    <div class="scanner-video-wrap"><video id="qrScannerVideo" playsinline muted></video></div>
+    <div class="scanner-tips">
+        <p class="m-0">Point your camera at the QR code on the poster.</p>
+        <p class="m-0" id="qrFlashHint" hidden><i class="bi bi-lightbulb"></i> Too dark to scan? Turn on your phone's torch from its quick settings or Control Centre, or ask someone to shine a light on the code.</p>
+        <p class="m-0 muted">Scanner not working? Use your phone's own QR scanner or camera app instead. Your progress is kept as long as the link opens in this same browser.</p>
+    </div>
 </div>
 
-
-<!-- Modal for displaying full-size photos -->
-<div class="modal fade" id="photoModal" tabindex="-1" aria-labelledby="photoModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+<!-- Photo viewer -->
+<div class="modal fade" id="photoModal" tabindex="-1" aria-label="Your photo" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="photoModalLabel">Your Photo</h5>
+            <div class="modal-header border-0">
+                <h5 class="modal-title">Your photo</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body text-center">
-                <img id="modalPhoto" src="" alt="Full size photo" class="img-fluid" style="max-width: 100%; max-height: 70vh;">
-                <div class="mt-2">
-                    <small class="text-muted" id="photoInfo"></small>
-                </div>
+            <div class="modal-body pt-0 text-center">
+                <img id="modalPhoto" src="" alt="Your photo" class="img-fluid rounded" style="max-height: 70vh;">
             </div>
         </div>
     </div>
 </div>
 
-<!-- Consent Modal -->
+<!-- Consent (first visit) -->
 <div class="modal fade" id="consentModal" tabindex="-1" aria-labelledby="consentModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title" id="consentModalLabel">
-                    <i class="bi bi-info-circle"></i> Data Consent & Privacy
-                </h5>
+            <div class="modal-header border-0">
+                <h5 class="modal-title fw-bold" id="consentModalLabel">👋 Welcome!</h5>
             </div>
-            <div class="modal-body">
-                <div class="consent-content">
-                    {{ app_data['data_consent']|safe }}
-                </div>
+            <div class="modal-body pt-0">
+                <p class="mb-1">Your explorer name for today is</p>
+                <div class="explorer-name-big mt-0 mb-3">{{ explorer_name }}</div>
+                <p>{{ app_data['description'] }}</p>
+                <div class="hint-label">Your photos &amp; privacy</div>
+                <p class="small">{{ app_data['data_consent']|safe }}</p>
+                {% if has_geo %}
+                <p class="small mb-0"><i class="bi bi-geo-alt"></i> Next, your browser will ask to use your location, so we can show how far away each place is. Your location stays on your device and is never sent to us.</p>
+                {% endif %}
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-success" id="acceptConsentBtn">
-                    <i class="bi bi-check-circle"></i> I Agree and Accept
-                </button>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn-x btn-primary-x" id="acceptConsentBtn">I agree, let's start!</button>
             </div>
         </div>
     </div>
 </div>
 
+<!-- Privacy (read only) -->
+<div class="modal fade" id="privacyModal" tabindex="-1" aria-labelledby="privacyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header border-0">
+                <h5 class="modal-title fw-bold" id="privacyModalLabel">Privacy &amp; consent</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-0 small">
+                <p>{{ app_data['data_consent']|safe }}</p>
+                {% if has_geo %}<p class="mb-0">Your location is only used on your device to show distances and is never sent to us.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
 
+<!-- Start over -->
+<div class="modal fade" id="startOverModal" tabindex="-1" aria-labelledby="startOverModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0">
+                <h5 class="modal-title fw-bold" id="startOverModalLabel">Start over?</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-0">
+                <p>This resets your trail. You have found {{ items_found }} of {{ items_total }} places so far, and your progress and photos will no longer be shown here.</p>
+            </div>
+            <div class="modal-footer border-0 stack">
+                <a class="btn-x btn-primary-x" style="background: var(--danger); color: #fff;" href="/?reset=true">Yes, start over</a>
+                <button type="button" class="btn-x btn-ghost-x" data-bs-dismiss="modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
 
+<!-- QR Scanner Library, self-hosted so it can load its worker file from the same origin -->
+<script src="{{ url_for('static', filename='vendor/qr-scanner/qr-scanner.umd.min.js') }}"></script>
 <script>
-// QR Scanner functionality
-let qrScanner = null;
-let qrCurrentFacingMode = 'environment'; // Start with back camera
+const TRAIL_URL = {{ url_for('trail')|tojson }};
+const PROXIMITY = {{ proximity|tojson }};
 
-// QR Scanner elements
-const openQrScannerBtn = document.getElementById('openQrScannerBtn');
-const qrScannerContainer = document.getElementById('qrScannerContainer');
-const qrScannerVideo = document.getElementById('qrScannerVideo');
-const closeQrScannerBtn = document.getElementById('closeQrScannerBtn');
-const switchQrCameraBtn = document.getElementById('switchQrCameraBtn');
-const qrScannerButtonContainer = document.getElementById('qrScannerButtonContainer');
-const qrScannerFeedback = document.getElementById('qrScannerFeedback');
-
-// Function to show QR scanner feedback
-function showQrFeedback(message, type = 'info') {
-    qrScannerFeedback.className = `alert alert-${type}`;
-    qrScannerFeedback.textContent = message;
-    qrScannerFeedback.style.display = 'block';
-    
-    // Auto-hide after 5 seconds for non-error messages
-    if (type !== 'danger') {
-        setTimeout(() => {
-            qrScannerFeedback.style.display = 'none';
-        }, 5000);
-    }
+// ---------- toasts ----------
+const toastBox = document.getElementById('toasts');
+function dismissLater(el, timeout) {
+    el.addEventListener('click', () => el.remove());
+    if (timeout) setTimeout(() => el.remove(), timeout);
 }
+function showToast(message, type = 'info', timeout = 4500) {
+    const el = document.createElement('div');
+    el.className = `toast-x ${type}`;
+    el.setAttribute('role', type === 'danger' ? 'alert' : 'status');
+    el.textContent = message;
+    toastBox.appendChild(el);
+    while (toastBox.children.length > 3) toastBox.firstElementChild.remove();
+    dismissLater(el, timeout);
+}
+toastBox.querySelectorAll('.toast-x').forEach(el => dismissLater(el, 4500));
 
-// Function to validate if URL belongs to current application
+// ---------- QR scanner ----------
+let qrScanner = null;
+let qrCurrentFacingMode = 'environment';
+let lastQrWarning = 0;
+const scannerSheet = document.getElementById('scannerSheet');
+const qrScannerVideo = document.getElementById('qrScannerVideo');
+const switchQrCameraBtn = document.getElementById('switchQrCameraBtn');
+const qrFlashBtn = document.getElementById('qrFlashBtn');
+const qrFlashHint = document.getElementById('qrFlashHint');
+
 function isValidApplicationUrl(scannedUrl) {
     try {
-        const scannedUrlObj = new URL(scannedUrl);
-        const currentUrlObj = new URL(window.location.href);
-        
-        // Check if the protocol, hostname, and port match
-        return (
-            scannedUrlObj.protocol === currentUrlObj.protocol &&
-            scannedUrlObj.hostname === currentUrlObj.hostname &&
-            scannedUrlObj.port === currentUrlObj.port
-        );
+        const scanned = new URL(scannedUrl);
+        const current = new URL(window.location.href);
+        return scanned.protocol === current.protocol && scanned.hostname === current.hostname && scanned.port === current.port;
     } catch (error) {
-        console.error('Invalid URL:', error);
         return false;
     }
 }
 
-// Function to handle QR code detection
+function closeScanner() {
+    if (qrScanner) {
+        qrScanner.destroy();
+        qrScanner = null;
+    }
+    scannerSheet.hidden = true;
+    document.body.classList.remove('no-scroll');
+}
+
 function handleQrResult(result) {
-    const scannedUrl = result.data;
-    
-    // Validate the URL
-    if (!isValidApplicationUrl(scannedUrl)) {
-        showQrFeedback('QR code contains an invalid or external URL. Only QR codes from this application are allowed.', 'warning');
+    if (!isValidApplicationUrl(result.data)) {
+        if (Date.now() - lastQrWarning > 4000) {
+            lastQrWarning = Date.now();
+            showToast("This QR code isn't part of the trail.", 'warning');
+        }
         return;
     }
-    
-    // Stop the scanner
-    if (qrScanner) {
-        qrScanner.stop();
-        qrScanner = null;
-    }
-    
-    // Hide scanner UI
-    qrScannerContainer.style.display = 'none';
-    qrScannerButtonContainer.style.display = 'block';
-    
-    // Show success message
-    showQrFeedback('QR code scanned successfully! Redirecting...', 'success');
-    
-    // Redirect to the scanned URL after a short delay
-    setTimeout(() => {
-        window.location.href = scannedUrl;
-    }, 1500);
+    closeScanner();
+    showToast('QR code found! Opening…', 'success');
+    window.location.href = result.data;
 }
 
-// Function to start QR scanner
+// Larger, sharper scan region than the library default helps with small or distant codes
+function qrScanRegion(video) {
+    const size = Math.round(Math.min(video.videoWidth, video.videoHeight) * 0.85);
+    return {
+        x: Math.round((video.videoWidth - size) / 2),
+        y: Math.round((video.videoHeight - size) / 2),
+        width: size,
+        height: size,
+        downScaledWidth: 600,
+        downScaledHeight: 600,
+    };
+}
+
 async function startQrScanner(facingMode = qrCurrentFacingMode) {
+    if (qrScanner) {
+        await qrScanner.setCamera(facingMode);
+        qrCurrentFacingMode = facingMode;
+        return;
+    }
+    qrScanner = new QrScanner(qrScannerVideo, handleQrResult, {
+        returnDetailedScanResult: true,
+        preferredCamera: facingMode,
+        highlightScanRegion: true,
+        highlightCodeOutline: true,
+        maxScansPerSecond: 15,
+        calculateScanRegion: qrScanRegion,
+    });
     try {
-        // Get available video devices
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter(device => device.kind === 'videoinput');
-        
-        let scannerOptions = {
-            returnDetailedScanResult: true,
-            highlightScanRegion: true,
-            highlightCodeOutline: true,
-            maxScansPerSecond: 5,
-        };
-        
-        // If specific devices are available, try to use them
-        if (videoDevices.length > 1) {
-            // Try to find specific camera by facing mode
-            const backCamera = videoDevices.find(device => 
-                device.label.toLowerCase().includes('back') || 
-                device.label.toLowerCase().includes('rear') ||
-                device.label.toLowerCase().includes('environment')
-            );
-            const frontCamera = videoDevices.find(device => 
-                device.label.toLowerCase().includes('front') || 
-                device.label.toLowerCase().includes('user') ||
-                device.label.toLowerCase().includes('facing')
-            );
-            
-            if (facingMode === 'environment' && backCamera) {
-                scannerOptions.preferredCamera = backCamera.deviceId;
-            } else if (facingMode === 'user' && frontCamera) {
-                scannerOptions.preferredCamera = frontCamera.deviceId;
-            } else {
-                scannerOptions.preferredCamera = facingMode;
-            }
-        } else {
-            // Fall back to facing mode constraint
-            scannerOptions.preferredCamera = facingMode;
-        }
-        
-        // Initialize QR Scanner
-        qrScanner = new QrScanner(qrScannerVideo, handleQrResult, scannerOptions);
-        
-        // Start scanning
         await qrScanner.start();
         qrCurrentFacingMode = facingMode;
-        
-        showQrFeedback('Scanner ready. Point your camera at a QR code.', 'info');
-        
+    } catch (error) {
+        qrScanner.destroy();
+        qrScanner = null;
+        throw error;
+    }
+}
+
+// Only shown when the active camera has a torch (not supported on iPhones)
+async function updateQrFlashButton() {
+    const available = qrScanner ? await qrScanner.hasFlash().catch(() => false) : false;
+    const on = available && qrScanner.isFlashOn();
+    qrFlashBtn.hidden = !available;
+    qrFlashBtn.classList.toggle('on', on);
+    qrFlashBtn.setAttribute('aria-label', on ? 'Turn light off' : 'Turn light on');
+    qrFlashHint.hidden = !qrScanner || available;
+}
+
+document.getElementById('openQrScannerBtn').addEventListener('click', async () => {
+    scannerSheet.hidden = false;
+    document.body.classList.add('no-scroll');
+    try {
+        await startQrScanner();
+        // camera labels are only available once permission is granted
+        const cameras = await QrScanner.listCameras();
+        switchQrCameraBtn.hidden = cameras.length < 2;
+        await updateQrFlashButton();
     } catch (error) {
         console.error('Error starting QR scanner:', error);
-        
-        // Try alternative camera if the preferred one fails
-        if (facingMode === 'environment') {
-            try {
-                qrScanner = new QrScanner(
-                    qrScannerVideo,
-                    handleQrResult,
-                    {
-                        returnDetailedScanResult: true,
-                        preferredCamera: 'user',
-                        highlightScanRegion: true,
-                        highlightCodeOutline: true,
-                        maxScansPerSecond: 5,
-                    }
-                );
-                await qrScanner.start();
-                qrCurrentFacingMode = 'user';
-                showQrFeedback('Scanner ready with front camera. Point your camera at a QR code.', 'info');
-            } catch (fallbackError) {
-                throw new Error('Could not access any camera');
-            }
-        } else {
-            throw new Error('Could not access camera');
-        }
+        closeScanner();
+        showToast("Could not open the camera. Please allow camera access, or use your phone's own QR scanner or camera app.", 'danger', 8000);
+    }
+});
+document.getElementById('closeQrScannerBtn').addEventListener('click', closeScanner);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !scannerSheet.hidden) closeScanner(); });
+
+switchQrCameraBtn.addEventListener('click', async () => {
+    switchQrCameraBtn.disabled = true;
+    try {
+        await startQrScanner(qrCurrentFacingMode === 'environment' ? 'user' : 'environment');
+    } catch (error) {
+        showToast('Could not switch camera.', 'warning');
+    }
+    await updateQrFlashButton();
+    switchQrCameraBtn.disabled = false;
+});
+
+qrFlashBtn.addEventListener('click', async () => {
+    if (!qrScanner) return;
+    try {
+        await qrScanner.toggleFlash();
+    } catch (error) {
+        console.error('Error toggling flashlight:', error);
+    }
+    await updateQrFlashButton();
+});
+
+window.addEventListener('pagehide', () => { if (qrScanner) qrScanner.destroy(); });
+
+// ---------- photo challenge ----------
+async function shrinkImage(file, maxSize = 1600) {
+    try {
+        const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+        const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(bitmap.width * scale);
+        canvas.height = Math.round(bitmap.height * scale);
+        canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+        return blob ? { blob, name: 'photo.jpg' } : { blob: file, name: file.name };
+    } catch (error) {
+        return { blob: file, name: file.name };
     }
 }
 
-// Open QR scanner
-if (openQrScannerBtn) {
-    openQrScannerBtn.addEventListener('click', async function() {
-        try {
-            qrScannerFeedback.style.display = 'none';
-            
-            // Check available cameras first
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const videoDevices = devices.filter(device => device.kind === 'videoinput');
-            
-            // Hide switch button if only one camera is available
-            if (videoDevices.length < 2) {
-                switchQrCameraBtn.style.display = 'none';
-            } else {
-                switchQrCameraBtn.style.display = 'inline-block';
-            }
-            
-            await startQrScanner();
-            qrScannerContainer.style.display = 'block';
-            qrScannerButtonContainer.style.display = 'none';
-        } catch (error) {
-            console.error('Error accessing camera for QR scanner:', error);
-            showQrFeedback('Could not access camera. Please check permissions and try again.', 'danger');
-        }
-    });
-}
+const photoFlow = document.querySelector('.photo-flow');
+if (photoFlow) {
+    const actions = photoFlow.querySelector('.photo-actions');
+    const previewBox = photoFlow.querySelector('.photo-preview');
+    const previewImg = photoFlow.querySelector('.preview-img');
+    const uploadBtn = photoFlow.querySelector('.upload-btn');
+    let selected = null;
 
-// Close QR scanner
-if (closeQrScannerBtn) {
-    closeQrScannerBtn.addEventListener('click', function() {
-        if (qrScanner) {
-            qrScanner.stop();
-            qrScanner = null;
-        }
-        qrScannerContainer.style.display = 'none';
-        qrScannerButtonContainer.style.display = 'block';
-        qrScannerFeedback.style.display = 'none';
-    });
-}
+    function resetPhoto() {
+        if (previewImg.src) URL.revokeObjectURL(previewImg.src);
+        previewImg.removeAttribute('src');
+        selected = null;
+        previewBox.hidden = true;
+        actions.hidden = false;
+    }
 
-// Switch QR camera
-if (switchQrCameraBtn) {
-    switchQrCameraBtn.addEventListener('click', async function() {
-        const newFacingMode = qrCurrentFacingMode === 'environment' ? 'user' : 'environment';
-        
-        // Show loading state
-        switchQrCameraBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Switching...';
-        switchQrCameraBtn.disabled = true;
-        
-        try {
-            // Stop current scanner completely
-            if (qrScanner) {
-                await qrScanner.stop();
-                qrScanner.destroy();
-                qrScanner = null;
-            }
-            
-            // Wait a moment for camera to be released
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Check if the desired camera is available
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const videoDevices = devices.filter(device => device.kind === 'videoinput');
-            
-            if (videoDevices.length < 2) {
-                throw new Error('Only one camera available');
-            }
-            
-            // Try to start with new camera
-            await startQrScanner(newFacingMode);
-            
-            // Reset button
-            switchQrCameraBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Switch Camera';
-            switchQrCameraBtn.disabled = false;
-            
-            showQrFeedback(`Switched to ${newFacingMode === 'environment' ? 'back' : 'front'} camera`, 'success');
-            
-        } catch (error) {
-            console.error('Error switching QR scanner camera:', error);
-            
-            // Try to restart with the original camera
-            try {
-                await startQrScanner(qrCurrentFacingMode);
-                showQrFeedback('Could not switch camera. Only one camera may be available.', 'warning');
-            } catch (restartError) {
-                console.error('Error restarting original camera:', restartError);
-                showQrFeedback('Error switching camera. Please close and reopen the scanner.', 'danger');
-            }
-            
-            // Reset button
-            switchQrCameraBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Switch Camera';
-            switchQrCameraBtn.disabled = false;
-        }
-    });
-}
-
-// Function to show photo in modal
-function showPhotoModal(imageSrc, photoInfo = '') {
-    const modalPhoto = document.getElementById('modalPhoto');
-    const photoInfoElement = document.getElementById('photoInfo');
-    
-    modalPhoto.src = imageSrc;
-    photoInfoElement.textContent = photoInfo;
-    
-    const photoModal = new bootstrap.Modal(document.getElementById('photoModal'));
-    photoModal.show();
-}
-
-// Function to load photos for the current session
-async function loadSessionPhotos() {
-    const sessionId = '{{ session["id"] }}';
-    
-    try {
-        // Fetch session data from the trail.json file
-        const response = await fetch(`../static/uploads/${sessionId}/trail.json`);
-        
-        if (!response.ok) {
-            console.log('No session data found');
+    photoFlow.querySelectorAll('.photo-input').forEach(input => input.addEventListener('change', () => {
+        const file = input.files && input.files[0];
+        input.value = '';
+        if (!file) return;
+        if (file.type && !file.type.startsWith('image/')) {
+            showToast('Please choose a photo.', 'danger');
             return;
         }
-        
-        const sessionData = await response.json();
-        const photos = sessionData.photos || [];
-        
-        // Group photos by item_id
-        const photosByItem = {};
-        photos.forEach(photo => {
-            const itemId = photo.item_id;
-            if (!photosByItem[itemId]) {
-                photosByItem[itemId] = [];
-            }
-            photosByItem[itemId].push(photo);
-        });
-        
-        // Display photos for each item
-        Object.keys(photosByItem).forEach(itemId => {
-            const photosContainer = document.getElementById(`photos-${itemId}`);
-            const photoCountElement = document.getElementById(`photo-count-${itemId}`);
-            
-            if (photosContainer && photosByItem[itemId].length > 0) {
-                const itemPhotos = photosByItem[itemId];
-                
-                // Clear existing content
-                photosContainer.innerHTML = '';
-                
-                // Add thumbnails
-                itemPhotos.forEach(photo => {
-                    const img = document.createElement('img');
-                    img.src = `../static/uploads/${sessionId}/${photo.filename}`;
-                    img.className = 'photo-thumbnail me-1 mb-1';
-                    img.style.cssText = 'width: 60px; height: 60px; object-fit: cover; cursor: pointer; border-radius: 4px; border: 2px solid #ddd;';
-                    img.alt = `Your photo`;
-                    img.title = `Uploaded on ${new Date(photo.uploaded_at).toLocaleString()}`;
-                    
-                    // Add click handler for modal
-                    img.addEventListener('click', function() {
-                        const photoInfo = `Uploaded on ${new Date(photo.uploaded_at).toLocaleString()}`;
-                        showPhotoModal(img.src, photoInfo);
-                    });
-                    
-                    photosContainer.appendChild(img);
-                });
-                
-                // Update photo count
-                if (photoCountElement) {
-                    const count = itemPhotos.length;
-                    photoCountElement.textContent = `${count} photo${count !== 1 ? 's' : ''} uploaded`;
-                }
-            }
-        });
-        
-    } catch (error) {
-        console.log('Could not load session photos:', error);
-    }
-}
+        resetPhoto();
+        selected = file;
+        previewImg.src = URL.createObjectURL(file);
+        actions.hidden = true;
+        previewBox.hidden = false;
+        previewBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }));
 
-// Load photos when the page loads
-document.addEventListener('DOMContentLoaded', function() {
-    loadSessionPhotos();
-    
-    // Check if consent modal should be shown
-    {% if not session.get('consent_given') %}
-    // Show consent modal on first visit
-    const consentModal = new bootstrap.Modal(document.getElementById('consentModal'));
-    consentModal.show();
-    {% endif %}
-});
+    photoFlow.querySelector('.retake-btn').addEventListener('click', resetPhoto);
 
-// Cleanup QR scanner when page is unloaded
-window.addEventListener('beforeunload', function() {
-    if (qrScanner) {
-        qrScanner.stop();
-        qrScanner = null;
-    }
-});
-
-// Stop QR scanner when other camera functions are used
-function stopQrScannerIfActive() {
-    if (qrScanner) {
-        qrScanner.stop();
-        qrScanner = null;
-        qrScannerContainer.style.display = 'none';
-        qrScannerButtonContainer.style.display = 'block';
-        qrScannerFeedback.style.display = 'none';
-    }
-}
-
-// Camera and photo upload functionality
-let stream = null;
-let capturedImageBlob = null;
-let currentFacingMode = 'environment'; // Start with back camera
-
-// Elements
-const openCameraBtn = document.getElementById('openCameraBtn');
-const chooseFileBtn = document.getElementById('chooseFileBtn');
-const cameraContainer = document.getElementById('cameraContainer');
-const camera = document.getElementById('camera');
-const canvas = document.getElementById('canvas');
-const captureBtn = document.getElementById('captureBtn');
-const switchCameraBtn = document.getElementById('switchCameraBtn');
-const closeCameraBtn = document.getElementById('closeCameraBtn');
-const previewContainer = document.getElementById('previewContainer');
-const preview = document.getElementById('preview');
-const confirmUploadBtn = document.getElementById('confirmUploadBtn');
-const retakeBtn = document.getElementById('retakeBtn');
-const photoForm = document.getElementById('photoForm');
-const cameraForm = document.getElementById('cameraForm');
-const photo = document.getElementById('photo');
-const uploadBtn = document.getElementById('uploadBtn');
-const cancelFileBtn = document.getElementById('cancelFileBtn');
-const buttonContainer = document.getElementById('buttonContainer');
-
-// Function to start camera with specified facing mode
-async function startCamera(facingMode = currentFacingMode) {
-    try {
-        // Stop existing stream if any
-        if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-        }
-        
-        stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { 
-                facingMode: facingMode,
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            } 
-        });
-        camera.srcObject = stream;
-        currentFacingMode = facingMode;
-    } catch (err) {
-        console.error('Error accessing camera:', err);
-        // If the requested camera fails, try the other one
-        if (facingMode === 'environment') {
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        facingMode: 'user',
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    } 
-                });
-                camera.srcObject = stream;
-                currentFacingMode = 'user';
-            } catch (fallbackErr) {
-                throw new Error('Could not access any camera');
-            }
-        } else {
-            throw new Error('Could not access camera');
-        }
-    }
-}
-
-// Open camera
-if (openCameraBtn) {
-    openCameraBtn.addEventListener('click', async function() {
-        try {
-            // Stop QR scanner if active to avoid camera conflicts
-            stopQrScannerIfActive();
-            
-            await startCamera();
-            cameraContainer.style.display = 'block';
-            buttonContainer.style.display = 'none';
-        } catch (err) {
-            console.error('Error accessing camera:', err);
-            alert('Could not access camera. Please check permissions or use the file upload option.');
-        }
-    });
-}
-
-// Switch camera
-if (switchCameraBtn) {
-    switchCameraBtn.addEventListener('click', async function() {
-        const newFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-        
-        // Show loading state
-        switchCameraBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Switching...';
-        switchCameraBtn.disabled = true;
-        
-        try {
-            await startCamera(newFacingMode);
-            // Reset button text
-            switchCameraBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Switch Camera';
-            switchCameraBtn.disabled = false;
-        } catch (err) {
-            console.error('Error switching camera:', err);
-            alert('Could not switch camera. The other camera may not be available.');
-            // Reset button text
-            switchCameraBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Switch Camera';
-            switchCameraBtn.disabled = false;
-        }
-    });
-}
-
-// Capture photo
-if (captureBtn) {
-    captureBtn.addEventListener('click', function() {
-        const context = canvas.getContext('2d');
-        canvas.width = camera.videoWidth;
-        canvas.height = camera.videoHeight;
-        context.drawImage(camera, 0, 0);
-        
-        // Convert canvas to blob
-        canvas.toBlob(function(blob) {
-            capturedImageBlob = blob;
-            const url = URL.createObjectURL(blob);
-            preview.src = url;
-            
-            // Hide camera, show preview
-            cameraContainer.style.display = 'none';
-            previewContainer.style.display = 'block';
-            
-            // Stop camera stream
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-                stream = null;
-            }
-        }, 'image/jpeg', 0.8);
-    });
-}
-
-// Close camera
-if (closeCameraBtn) {
-    closeCameraBtn.addEventListener('click', function() {
-        if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-            stream = null;
-        }
-        cameraContainer.style.display = 'none';
-        buttonContainer.style.display = 'block';
-    });
-}
-
-// Confirm upload (camera photo)
-if (confirmUploadBtn) {
-    confirmUploadBtn.addEventListener('click', function() {
-        if (capturedImageBlob) {
-            // Create a File object from the blob
-            const file = new File([capturedImageBlob], 'camera_photo.jpg', { type: 'image/jpeg' });
-            
-            // Create FormData and append the file
-            const formData = new FormData();
-            formData.append('photo', file);
-            formData.append('item_id', document.querySelector('input[name="item_id"]').value);
-            
-            // Show loading state
-            confirmUploadBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Uploading...';
-            confirmUploadBtn.disabled = true;
-            
-            // Send the form data
-            fetch(window.location.href, {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => {
-                if (response.ok) {
-                    // Reload the photos before refreshing the page
-                    loadSessionPhotos();
-                    // Small delay to allow photo loading, then reload page
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 500);
-                } else {
-                    throw new Error('Upload failed');
-                }
-            })
-            .catch(error => {
-                console.error('Error uploading photo:', error);
-                alert('Failed to upload photo. Please try again.');
-                confirmUploadBtn.innerHTML = '<i class="bi bi-upload"></i> Upload This Photo';
-                confirmUploadBtn.disabled = false;
-            });
-        }
-    });
-}
-
-// Retake photo
-if (retakeBtn) {
-    retakeBtn.addEventListener('click', function() {
-        previewContainer.style.display = 'none';
-        buttonContainer.style.display = 'block';
-        capturedImageBlob = null;
-        if (preview.src) {
-            URL.revokeObjectURL(preview.src);
-        }
-    });
-}
-
-// Choose file from gallery
-if (chooseFileBtn) {
-    chooseFileBtn.addEventListener('click', function() {
-        photoForm.style.display = 'block';
-        buttonContainer.style.display = 'none';
-    });
-}
-
-// Cancel file upload
-if (cancelFileBtn) {
-    cancelFileBtn.addEventListener('click', function() {
-        photoForm.style.display = 'none';
-        buttonContainer.style.display = 'block';
-        photo.value = '';
+    uploadBtn.addEventListener('click', async () => {
+        if (!selected) return;
+        const label = uploadBtn.innerHTML;
         uploadBtn.disabled = true;
-    });
-}
-
-// Enable upload button when file is selected
-if (photo) {
-    photo.addEventListener('change', function() {
-        if (this.files && this.files.length > 0) {
+        uploadBtn.textContent = 'Uploading…';
+        try {
+            const { blob, name } = await shrinkImage(selected);
+            const form = new FormData();
+            form.append('photo', blob, name);
+            form.append('item_id', photoFlow.dataset.itemId);
+            const response = await fetch(TRAIL_URL, { method: 'POST', body: form, headers: { 'Accept': 'application/json' } });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.success) throw new Error(data.message || 'Upload failed');
+            window.location.href = `${TRAIL_URL}?id=${encodeURIComponent(photoFlow.dataset.itemId)}`;
+        } catch (error) {
+            console.error('Error uploading photo:', error);
+            showToast("Sorry, the photo couldn't be uploaded. Please try again.", 'danger', 7000);
             uploadBtn.disabled = false;
-        } else {
-            uploadBtn.disabled = true;
+            uploadBtn.innerHTML = label;
         }
     });
 }
 
-// Start Over functionality with confirmation dialog
-const startOverBtn = document.getElementById('startOverBtn');
-if (startOverBtn) {
-    startOverBtn.addEventListener('click', function() {
-        // Create a custom confirmation dialog
-        const confirmDialog = document.createElement('div');
-        confirmDialog.className = 'modal fade';
-        confirmDialog.id = 'confirmStartOverModal';
-        confirmDialog.setAttribute('tabindex', '-1');
-        confirmDialog.setAttribute('aria-labelledby', 'confirmStartOverModalLabel');
-        confirmDialog.setAttribute('aria-hidden', 'true');
-        
-        confirmDialog.innerHTML = `
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-                    <div class="modal-header bg-danger text-white">
-                        <h5 class="modal-title" id="confirmStartOverModalLabel">
-                            <i class="bi bi-exclamation-triangle"></i> Confirm Start Over
-                        </h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <p><strong>Are you sure you want to start over?</strong></p>
-                        <p>This will reset your progress and you will lose all your found locations and uploaded photos. This action cannot be undone.</p>
-                        <p class="text-muted">Current progress: {{ items_found }} out of {{ items_total }} locations found.</p>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                            <i class="bi bi-x"></i> Cancel
-                        </button>
-                        <button type="button" class="btn btn-danger" id="confirmStartOverAction">
-                            <i class="bi bi-arrow-clockwise"></i> Yes, Start Over
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        // Add the modal to the document
-        document.body.appendChild(confirmDialog);
-        
-        // Show the modal
-        const modal = new bootstrap.Modal(confirmDialog);
-        modal.show();
-        
-        // Handle the confirmation action
-        const confirmAction = confirmDialog.querySelector('#confirmStartOverAction');
-        confirmAction.addEventListener('click', function() {
-            // Redirect to reset URL
-            window.location.href = '/?reset=true';
-        });
-        
-        // Clean up modal when it's hidden
-        confirmDialog.addEventListener('hidden.bs.modal', function() {
-            document.body.removeChild(confirmDialog);
-        });
-    });
+// ---------- place cards and photos ----------
+document.querySelectorAll('.place-head[aria-controls]').forEach(btn => btn.addEventListener('click', () => {
+    const open = btn.getAttribute('aria-expanded') === 'true';
+    btn.setAttribute('aria-expanded', String(!open));
+    document.getElementById(btn.getAttribute('aria-controls')).hidden = open;
+}));
+
+document.querySelectorAll('.photo-thumb').forEach(btn => btn.addEventListener('click', () => {
+    document.getElementById('modalPhoto').src = btn.dataset.src;
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('photoModal')).show();
+}));
+
+// ---------- distances to places ----------
+function haversine(lat1, lon1, lat2, lon2) {
+    const R = 6371000, rad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * rad, dLon = (lon2 - lon1) * rad;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-// Consent handling
+function formatDistance(m) {
+    return m < 1000 ? `${Math.max(5, Math.round(m / 5) * 5)} m` : `${(m / 1000).toFixed(1)} km`;
+}
+
+function fillTemplate(text, vars) {
+    return text.replace(/\{(\w+)\}/g, (match, key) => key in vars ? vars[key] : match);
+}
+
+// Mirror the top of the sorted list into the "Your next place" card
+function refreshNextCard() {
+    const next = document.getElementById('nextCard');
+    const top = document.querySelector('#placesList .place-card');
+    if (!next || !top) return;
+    if (next.dataset.itemId !== top.dataset.itemId) {
+        next.dataset.itemId = top.dataset.itemId;
+        document.getElementById('nextTitle').textContent = top.dataset.title;
+        document.getElementById('nextHint').innerHTML = top.querySelector('.place-hint').innerHTML;
+        const thumb = top.querySelector('.place-thumb').cloneNode(true);
+        thumb.className = thumb.className.replace('place-thumb', 'next-img');
+        document.getElementById('nextImgWrap').replaceChildren(thumb);
+        next.classList.remove('changed');
+        void next.offsetWidth;
+        next.classList.add('changed');
+    }
+    const srcDist = top.querySelector('.proximity-distance');
+    const dist = document.getElementById('nextDistance');
+    dist.textContent = srcDist.textContent;
+    dist.hidden = srcDist.hidden;
+    const srcMsg = top.querySelector('.proximity-msg');
+    const msg = document.getElementById('nextMsg');
+    msg.textContent = srcMsg.textContent;
+    msg.className = srcMsg.className;
+    msg.hidden = srcMsg.hidden;
+}
+
+function initProximity() {
+    const btn = document.getElementById('enableGeoBtn');
+    const list = document.getElementById('placesList');
+    if (!btn || !list) return () => {};
+    const controls = document.getElementById('geoControls');
+    const statusEl = document.getElementById('geoStatus');
+    const banner = document.getElementById('nearBanner');
+    const rows = [...list.querySelectorAll('.place-card')];
+    const tiers = PROXIMITY.tiers || [];
+    const hysteresis = PROXIMITY.hysteresis_m || 0;
+    const interval = (PROXIMITY.update_interval_s || 5) * 1000;
+    const tierState = new Map();
+    const announced = new Set();
+    let watchId = null, active = false, retried = false, lastReorder = 0, reorderTimer = null, bannerTimer = null;
+
+    function showNotice(text, withButton) {
+        statusEl.textContent = text;
+        btn.hidden = !withButton;
+        controls.hidden = false;
+    }
+
+    if (!('geolocation' in navigator) || !window.isSecureContext) {
+        showNotice("Distances to the places can't be shown on this device or connection.", false);
+        return () => {};
+    }
+
+    // the current tier gets extra slack so messages don't flicker at the boundary
+    function tierFor(distance, previous) {
+        for (let i = 0; i < tiers.length; i++) {
+            if (distance <= tiers[i].max_distance + (i === previous ? hysteresis : 0)) return i;
+        }
+        return -1;
+    }
+
+    function showBanner(text) {
+        banner.textContent = text;
+        banner.hidden = false;
+        clearTimeout(bannerTimer);
+        bannerTimer = setTimeout(() => { banner.hidden = true; }, 6000);
+    }
+    banner.addEventListener('click', () => { banner.hidden = true; });
+
+    function reorder() {
+        const sorted = [...rows].sort((a, b) => {
+            const da = a.dataset.distance ? +a.dataset.distance : Infinity;
+            const db = b.dataset.distance ? +b.dataset.distance : Infinity;
+            return (da - db) || (rows.indexOf(a) - rows.indexOf(b));
+        });
+        const current = [...list.children];
+        if (sorted.every((row, i) => row === current[i])) return;
+        const before = new Map(sorted.map(row => [row, row.getBoundingClientRect().top]));
+        sorted.forEach(row => list.appendChild(row));
+        sorted.forEach(row => {
+            const dy = before.get(row) - row.getBoundingClientRect().top;
+            if (dy) row.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 600, easing: 'ease-out' });
+        });
+        refreshNextCard();
+    }
+
+    function scheduleReorder() {
+        if (reorderTimer) return;
+        reorderTimer = setTimeout(() => {
+            reorderTimer = null;
+            lastReorder = Date.now();
+            reorder();
+        }, Math.max(0, lastReorder + interval - Date.now()));
+    }
+
+    function update(pos) {
+        const { latitude, longitude, accuracy } = pos.coords;
+        const rough = accuracy > 50;
+        controls.hidden = true;
+
+        rows.forEach(row => {
+            if (!row.dataset.lat) return;
+            const distance = haversine(latitude, longitude, +row.dataset.lat, +row.dataset.lon);
+            row.dataset.distance = distance;
+            const vars = { distance: formatDistance(distance), title: row.dataset.title };
+            const distEl = row.querySelector('.proximity-distance');
+            distEl.textContent = '📍 ' + (rough ? '≈ ' : '') + fillTemplate(PROXIMITY.far_text, vars);
+            distEl.hidden = false;
+
+            const previous = tierState.has(row) ? tierState.get(row) : -1;
+            const t = tierFor(distance, previous);
+            tierState.set(row, t);
+            const msgEl = row.querySelector('.proximity-msg');
+            if (t < 0) {
+                msgEl.hidden = true;
+                announced.delete(row.dataset.itemId);
+                return;
+            }
+            const tier = tiers[t];
+            const text = (t === 0 && row.dataset.nearText) ? row.dataset.nearText : tier.text;
+            const tone = /^\w+$/.test(tier.highlight || '') ? tier.highlight : 'info';
+            msgEl.textContent = fillTemplate(text, vars);
+            msgEl.className = `proximity-msg tone-${tone}`;
+            msgEl.hidden = false;
+            if (tier.vibrate && !announced.has(row.dataset.itemId)) {
+                announced.add(row.dataset.itemId);
+                showBanner(msgEl.textContent);
+                if (navigator.vibrate) navigator.vibrate(200);
+            }
+        });
+        refreshNextCard();
+        scheduleReorder();
+    }
+
+    function stop() {
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+    }
+
+    function start() {
+        if (watchId !== null) return;
+        active = true;
+        watchId = navigator.geolocation.watchPosition(update, err => {
+            if (err.code !== err.PERMISSION_DENIED) return;  // timeouts etc. resolve themselves
+            stop();
+            active = false;
+            showNotice("Distances to the places can't be shown because your device's location isn't shared."
+                + (retried ? ' If no question popped up, allow location for this site in your browser settings and try again.' : ''), true);
+        }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+    }
+
+    btn.addEventListener('click', () => { retried = true; start(); });
+    // save battery while the page is in the background
+    document.addEventListener('visibilitychange', () => {
+        if (!active) return;
+        if (document.hidden) stop(); else start();
+    });
+
+    return start;
+}
+
+const startProximity = initProximity();
+
+// ---------- consent ----------
+{% if session.get('consent_given') %}
+startProximity();
+{% else %}
+const consentModal = new bootstrap.Modal(document.getElementById('consentModal'));
+consentModal.show();
 const acceptConsentBtn = document.getElementById('acceptConsentBtn');
-if (acceptConsentBtn) {
-    acceptConsentBtn.addEventListener('click', function() {
-        // Show loading state
-        acceptConsentBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Processing...';
-        acceptConsentBtn.disabled = true;
-        
-        // Send consent acceptance to server
-        fetch('/accept-consent', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Hide the modal
-                const consentModal = bootstrap.Modal.getInstance(document.getElementById('consentModal'));
-                consentModal.hide();
-            } else {
-                throw new Error('Failed to save consent');
-            }
-        })
-        .catch(error => {
-            console.error('Error saving consent:', error);
-            alert('There was an error saving your consent. Please try again.');
-            acceptConsentBtn.innerHTML = '<i class="bi bi-check-circle"></i> I Agree and Accept';
-            acceptConsentBtn.disabled = false;
-        });
-    });
-}
+acceptConsentBtn.addEventListener('click', async () => {
+    acceptConsentBtn.disabled = true;
+    try {
+        const response = await fetch('/accept-consent', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        const data = await response.json();
+        if (!data.success) throw new Error('Failed to save consent');
+        consentModal.hide();
+        startProximity();
+    } catch (error) {
+        console.error('Error saving consent:', error);
+        showToast('Something went wrong. Please try again.', 'danger');
+        acceptConsentBtn.disabled = false;
+    }
+});
+{% endif %}
 </script>
-
 {% endblock %}
+
+{% block footer %}{% endblock %}

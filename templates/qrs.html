@@ -1,11 +1,57 @@
 {% extends 'layout.html' %}
 
+{% block head %}
+{% if mapbox_token and places %}
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
+{% endif %}
+<style>
+#qrMap { width: 100%; height: 640px; border-radius: 12px; border: 1px solid #dee2e6; }
+.qr-marker { width: 92px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; padding: 6px 6px 4px; background: #fff; border-radius: 10px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25); }
+.qr-marker::after { content: ""; position: absolute; bottom: -8px; left: 50%; margin-left: -8px; border: 8px solid transparent; border-bottom: 0; border-top-color: #fff; }
+.qr-marker img { width: 80px; height: 80px; display: block; }
+.qr-marker span { width: 100%; margin-top: 2px; font-size: 11px; line-height: 1.15; font-weight: 700; color: #14182a; text-align: center; overflow-wrap: anywhere; }
+.print-only { display: none; }
+@media print {
+    .no-print, footer { display: none !important; }
+    .print-only { display: block; }
+    #qrMap { border: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .map-section { break-after: page; }
+    .qr-row { break-inside: avoid; }
+}
+</style>
+{% endblock %}
+
 {% block body %}
-    <h1>QR Codes</h1>
-    
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-4 mb-3 no-print">
+        <h1 class="m-0">QR Codes</h1>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-primary" href="{{ url_for('qr_posters_pdf') }}"><i class="bi bi-file-earmark-pdf"></i> Download posters (A4 PDF)</a>
+            <button type="button" class="btn btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer"></i> Print this page</button>
+        </div>
+    </div>
+
+    {% if 'localhost' in base_url or '127.0.0.1' in base_url %}
+    <div class="alert alert-warning no-print">
+        The QR codes currently point to <code>{{ base_url }}</code>, which phones cannot reach.
+        Set <code>TRAIL_PUBLIC_URL</code> to the public address, or open this page through it, before printing.
+    </div>
+    {% endif %}
+
+    {% if places %}
+    <section class="map-section mb-4">
+        <h2 class="print-only">{{ app_data['name'] }}</h2>
+        {% if mapbox_token %}
+        <div id="qrMap" role="img" aria-label="Map of all QR code locations"></div>
+        {% else %}
+        <div class="alert alert-info no-print">Set <code>MAPBOX_TOKEN</code> to show the map of QR code locations.</div>
+        {% endif %}
+    </section>
+    {% endif %}
+
     <div class="container">
     {% for item in app_data['id_dict'] %}
-        <div class="row" >
+        <div class="row qr-row">
             <h2>{{ app_data['id_dict'][item]['title'] }}</h2>
             <p>{{ app_data['id_dict'][item]['text']|safe }}</p>
             {% set image_filename = app_data['id_dict'][item]['image'] + ".jpg" %}
@@ -28,6 +74,37 @@
         </div>
     {% endfor %}
     </div>
-    
 
+{% if mapbox_token and places %}
+<script>
+const CFG = {{ map_config|tojson }};
+const PLACES = {{ places|tojson }};
+mapboxgl.accessToken = {{ mapbox_token|tojson }};
+const qrMap = new mapboxgl.Map({
+    container: 'qrMap',
+    style: 'mapbox://styles/mapbox/light-v11',
+    center: CFG.center || [PLACES[0].lon, PLACES[0].lat],
+    zoom: CFG.zoom || 16,
+    // keeps the map canvas visible when printing
+    preserveDrawingBuffer: true,
+});
+qrMap.addControl(new mapboxgl.NavigationControl({ showCompass: false }));
+
+const bounds = new mapboxgl.LngLatBounds();
+PLACES.forEach(p => {
+    const el = document.createElement('div');
+    el.className = 'qr-marker';
+    const img = document.createElement('img');
+    img.src = p.qr;
+    img.alt = '';
+    const label = document.createElement('span');
+    label.textContent = p.title;
+    el.append(img, label);
+    new mapboxgl.Marker({ element: el, anchor: 'bottom', offset: [0, -8] }).setLngLat([p.lon, p.lat]).addTo(qrMap);
+    bounds.extend([p.lon, p.lat]);
+});
+// markers stand above their point, so leave extra room at the top
+qrMap.fitBounds(bounds, { padding: { top: 140, bottom: 40, left: 70, right: 70 }, duration: 0 });
+</script>
+{% endif %}
 {% endblock %}
