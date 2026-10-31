@@ -17,7 +17,12 @@ A simple Flask web app for a QR code picture trail. Participants scan QR codes p
 
 ### Trail content
 
-The trail (title, description, consent text, items with their tasks and hints) is defined in [config.py](config.py) as `app_data`. Each entry in `id_dict` is keyed by a unique ID, which is encoded in its QR code. Alternative trails are kept in separate files (e.g. [config-WEL24.py](config-WEL24.py), [config-WEL26.py](config-WEL26.py)) and selected with the `TRAIL_CONFIG` environment variable. Item images are looked up in `static/` by the `image` name.
+The trail (title, description, consent text, items with their tasks and hints) is defined in [config.py](config.py) as `app_data`. Each entry in `id_dict` is keyed by a unique ID, which is encoded in its QR code. Alternative trails are kept in separate files (e.g. [config-WEL24.py](config-WEL24.py), [config-WEL26.py](config-WEL26.py), [config-WEL26-imp.py](config-WEL26-imp.py)) and selected with the `TRAIL_CONFIG` environment variable. Item images are looked up in `static/` by the `image` name: `"sun"` means `static/sun.jpg`, while a name with an extension is used as is and may include subfolders, e.g. `"wel-art/art_01.png"` for `static/wel-art/art_01.png`.
+
+Optional trail-level settings:
+
+- `required_places`: number of places needed to complete the trail (default: all). With e.g. `6` of 11, the trail page says "find any 6 of the 11 places", unlocks the certificate after 6 and lists the remaining places as bonus places.
+- `completion_text`: message shown once the trail is complete but not every place has been found. `{found}`, `{required}` and `{total}` are filled in.
 
 For the live map and distances (see [config-WEL26.py](config-WEL26.py)):
 

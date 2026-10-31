@@ -48,6 +48,23 @@ def load_app_data():
 app_data = load_app_data()
 
 
+def image_file(item):
+    """Path of an item's picture relative to static/; `image` may include subfolders and an extension (default .jpg)."""
+    image = item['image']
+    return image if path.splitext(image)[1] else image + '.jpg'
+
+
+def image_slug(item):
+    """Item's image name without folders or extension, safe for file names and logs."""
+    return path.splitext(path.basename(item['image']))[0]
+
+
+def get_required_places():
+    """Number of places needed to complete the trail (`required_places`, default: all of them)."""
+    total = len(app_data['id_dict'])
+    return max(1, min(int(app_data.get('required_places', total)), total))
+
+
 def generate_session_id():
     """Generate a human-readable session ID using coolname library (62+ billion combinations)."""
     from coolname import generate_slug
@@ -67,6 +84,9 @@ def file_exists(filepath):
     """Check if a file exists in the static folder"""
     full_path = path.join(app.static_folder, filepath)
     return path.exists(full_path)
+
+
+app.jinja_env.globals['image_file'] = image_file
 
 # Configure upload settings
 app.config['UPLOAD_FOLDER'] = app_data['upload_folder']
@@ -446,6 +466,7 @@ class StatsTracker:
 
     def snapshot(self):
         total_items = len(app_data['id_dict'])
+        required = get_required_places()
         cutoff = time.time() - self.RECENT_WINDOW_S
         with self._lock:
             while self._recent and self._recent[0] < cutoff:
@@ -457,7 +478,7 @@ class StatsTracker:
             return {
                 'sessions': sum(1 for found in self._sessions.values() if found),
                 'checkins': sum(per_place.values()),
-                'completed': sum(1 for found in self._sessions.values() if len(found) >= total_items),
+                'completed': sum(1 for found in self._sessions.values() if len(found) >= required),
                 'photos': self._photos,
                 'total_places': total_items,
                 'per_place': per_place,
@@ -515,7 +536,7 @@ def get_map_places():
     for item_id, item in app_data['id_dict'].items():
         if 'lat' not in item or 'lon' not in item:
             continue
-        icon = item['image'] + '.jpg'
+        icon = image_file(item)
         places.append({
             'id': item_id,
             'title': item['title'],
@@ -589,7 +610,7 @@ def trail():
             items_found = sum(1 for item in app_data["id_dict"] if session["found_" + item])
             
             # Generate filename and session directory
-            item_name = app_data["id_dict"][item_id]["image"]
+            item_name = image_slug(app_data["id_dict"][item_id])
             session_dir, filename = generate_photo_filename(item_name, session["id"], items_found)
             
             # Save file
@@ -624,7 +645,7 @@ def trail():
         session[found_id] = True
         
         # Update session data with found item
-        item_name = app_data["id_dict"][id]["image"]
+        item_name = image_slug(app_data["id_dict"][id])
         update_session_with_item(session["id"], id, item_name)
 
         if not just_uploaded:
@@ -643,7 +664,7 @@ def trail():
             logwriter.writerow(
                 {
                     "id": id,
-                    "item": app_data["id_dict"][id]["image"],
+                    "item": image_slug(app_data["id_dict"][id]),
                     "session": session["id"],
                     "found": items_found,
                     "ip": request.headers.get(
@@ -665,6 +686,7 @@ def trail():
         found=id if id in app_data["id_dict"] else "",
         items_found=items_found,
         items_total=items_total,
+        items_required=get_required_places(),
         proximity=get_proximity_config(),
         theme=get_theme(),
         photos_by_item=get_session_photos(session["id"]),
@@ -737,7 +759,7 @@ def posters_pdf_path(base_url):
     import tempfile
 
     key = json.dumps([base_url, app_data["name"], app_data.get("description"), app_data.get("data_consent"),
-                      app_data["id_dict"], get_theme()["accent"]], sort_keys=True, default=str)
+                      app_data["id_dict"], get_required_places(), get_theme()["accent"]], sort_keys=True, default=str)
     cache_dir = path.join(tempfile.gettempdir(), "qrtrail-posters")
     makedirs(cache_dir, exist_ok=True)
     pdf_path = path.join(cache_dir, hashlib.sha1(key.encode()).hexdigest() + ".pdf")
@@ -770,10 +792,12 @@ def build_posters_pdf(base_url, output):
     item_style = ParagraphStyle("item", fontName="Helvetica", fontSize=12.5, leading=16, textColor=dark, alignment=TA_CENTER)
     small = ParagraphStyle("small", fontName="Helvetica", fontSize=7.5, leading=9.5, textColor=muted)
     total = len(app_data["id_dict"])
+    required = get_required_places()
+    find_text = f"Find all {total} posters" if required == total else f"Find any {required} of the {total} posters"
 
     how_to = Paragraph(
         f"<b>How to take part:</b> {poster_markup(app_data.get('description', ''))}<br/><br/>"
-        f"<b>1.</b> Scan the QR code with your phone camera &#183; <b>2.</b> Find all {total} posters "
+        f"<b>1.</b> Scan the QR code with your phone camera &#183; <b>2.</b> {find_text} "
         f"&#183; <b>3.</b> Try the photo challenge (optional)",
         body,
     )
@@ -799,11 +823,14 @@ def build_posters_pdf(base_url, output):
         pdf.drawCentredString(width / 2, y, app_data["name"])
         y -= 14 * mm
         pdf.setFillColor(dark)
-        pdf.setFont("Helvetica-Bold", 36)
+        title_size = 36
+        while title_size > 20 and pdf.stringWidth(item["title"], "Helvetica-Bold", title_size) > text_width:
+            title_size -= 1
+        pdf.setFont("Helvetica-Bold", title_size)
         pdf.drawCentredString(width / 2, y, item["title"])
         y -= 4 * mm
 
-        image_path = path.join(app.static_folder, item["image"] + ".jpg")
+        image_path = path.join(app.static_folder, image_file(item))
         if path.isfile(image_path):
             image = ImageReader(poster_image(image_path))
             image_w, image_h = image.getSize()
@@ -1028,7 +1055,7 @@ def gallery():
                             if photo_info and photo_info.get('item_id'):
                                 item_id = photo_info['item_id']
                                 if item_id in app_data['id_dict']:
-                                    item_name = app_data['id_dict'][item_id]['image']
+                                    item_name = image_slug(app_data['id_dict'][item_id])
                                 elif item_id in session_data.get('items_found', {}):
                                     item_name = session_data['items_found'][item_id]['name']
                             else:

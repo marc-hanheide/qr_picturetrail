@@ -1,14 +1,16 @@
 {% extends 'layout.html' %}
 
 {% set id_dict = app_data['id_dict'] %}
-{% set complete = items_found == items_total %}
+{% set complete = items_found >= items_required %}
+{% set all_found = items_found == items_total %}
+{% set goal = items_total if complete else items_required %}
 {% set has_geo = id_dict.values()|selectattr('lat', 'defined')|list|length > 0 %}
 {% set ns = namespace(next=None) %}
 {% set explorer_name = session['id']|replace('-', ' ')|title %}
 {% for item in id_dict %}{% if not session['found_' + item] and ns.next is none %}{% set ns.next = item %}{% endif %}{% endfor %}
 
 {% macro place_image(item, cls) -%}
-    {%- set img = id_dict[item]['image'] + '.jpg' -%}
+    {%- set img = image_file(id_dict[item]) -%}
     {%- if img|file_exists -%}
         <img class="{{ cls }}" src="{{ url_for('static', filename=img) }}" alt="" loading="lazy">
     {%- else -%}
@@ -202,12 +204,12 @@ body.no-scroll { overflow: hidden; }
         <div class="topbar-title">{{ app_data['project_name'] }}</div>
         <div class="explorer">You are <strong>{{ explorer_name }}</strong></div>
     </div>
-    <div class="progress-pill" role="img" aria-label="{{ items_found }} of {{ items_total }} places found">
+    <div class="progress-pill" role="img" aria-label="{{ items_found }} of {{ goal }} places found">
         <svg class="ring" viewBox="0 0 36 36" aria-hidden="true">
             <circle class="ring-bg" cx="18" cy="18" r="15"/>
-            <circle class="ring-fg" cx="18" cy="18" r="15" stroke-dasharray="{{ '%.2f'|format(94.25 * items_found / items_total) }} 94.25"{% if items_found == 0 %} hidden{% endif %}/>
+            <circle class="ring-fg" cx="18" cy="18" r="15" stroke-dasharray="{{ '%.2f'|format(94.25 * items_found / goal) }} 94.25"{% if items_found == 0 %} hidden{% endif %}/>
         </svg>
-        <span><strong>{{ items_found }}</strong>/{{ items_total }}</span>
+        <span><strong>{{ items_found }}</strong>/{{ goal }}</span>
     </div>
 </header>
 
@@ -230,6 +232,9 @@ body.no-scroll { overflow: hidden; }
             <li><span>2</span>Scan its QR code</li>
             <li><span>3</span>Do the fun photo challenge</li>
         </ol>
+        {% if items_required < items_total %}
+        <p class="muted mb-0">Find any <strong>{{ items_required }}</strong> of the {{ items_total }} places to finish the trail.</p>
+        {% endif %}
     </section>
     {% endif %}
 
@@ -279,8 +284,14 @@ body.no-scroll { overflow: hidden; }
     {% if complete %}
     <section class="card-x complete-card">
         <div class="trophy">🏆</div>
+        {% if all_found %}
         <h1>You found all {{ items_total }} places!</h1>
         <p class="muted mb-1">Amazing work! Show your explorer name to a trail judge:</p>
+        {% else %}
+        <h1>You found {{ items_found }} of the {{ items_total }} places!</h1>
+        {% if app_data.get('completion_text') %}<p>{{ app_data['completion_text']|replace('{found}', items_found|string)|replace('{required}', items_required|string)|replace('{total}', items_total|string)|safe }}</p>{% endif %}
+        <p class="muted mb-1">You've finished the trail! Show your explorer name to a trail judge:</p>
+        {% endif %}
         <div class="explorer-name-big">{{ explorer_name }}</div>
         {% if 'certificate.png'|file_exists %}
         <a href="{{ url_for('static', filename='certificate.pdf') }}" target="_blank" rel="noopener">
@@ -307,9 +318,9 @@ body.no-scroll { overflow: hidden; }
     </section>
     {% endif %}
 
-    {% if not complete %}
+    {% if not all_found %}
     <section aria-labelledby="todoTitle">
-        <h2 class="section-title" id="todoTitle">Still to find <span class="count">{{ items_total - items_found }}</span></h2>
+        <h2 class="section-title" id="todoTitle">{{ 'Bonus places still hiding' if complete else 'Still to find' }} <span class="count">{{ items_total - items_found }}</span></h2>
         {% if has_geo %}
         <div id="geoControls" class="notice mt-2" hidden>
             <span id="geoStatus"></span>
