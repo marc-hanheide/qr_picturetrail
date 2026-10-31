@@ -20,6 +20,16 @@ app_data = {
     "project_name": "The Imp's Night-Time Gallery",
     "keywords": "qr, trail, kids, children, lincoln imp, art, gallery, west end lights, lincoln, flask, webapp",
     "upload_folder": "static/uploads/",
+    # shown at the top of the trail page before the first find, then under "About this trail"
+    "intro": (
+        "<p>Psst! Down here! It's me, the <b>Lincoln Imp</b>! 👋</p>"
+        "<p>Long, long ago I flew into Lincoln Cathedral and caused SO much mischief that an angel turned me to stone. "
+        "I've been sitting high up in the Cathedral ever since... but tonight is West End Lights, so I've sneaked out! Hee hee!</p>"
+        "<p>I've turned the West End into my very own <b>Night-Time Gallery</b>. I've hidden <b>11 pictures</b> "
+        "all around its streets. They were drawn by children from St Faith's Infant and Nursery School and "
+        "St Faith and St Martin Junior School, and they're my favourite pictures EVER!</p>"
+        "<p>Can you find <b>6</b> of them? Use my clues to find them, and grown-ups, please help little explorers stay safe near roads.</p>"
+    ),
     "required_places": 6,
     # {found}, {required} and {total} are filled in; shown once enough places are found, until all are
     "completion_text": "You did it! You've found {found} of my pictures, so you're an official Imp Gallery Explorer! There are more pictures still hiding if you want to keep looking.",

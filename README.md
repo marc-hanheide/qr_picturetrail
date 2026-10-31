@@ -23,6 +23,7 @@ Optional trail-level settings:
 
 - `required_places`: number of places needed to complete the trail (default: all). With e.g. `6` of 11, the trail page says "find any 6 of the 11 places", unlocks the certificate after 6 and lists the remaining places as bonus places.
 - `completion_text`: message shown once the trail is complete but not every place has been found. `{found}`, `{required}` and `{total}` are filled in.
+- `intro`: HTML introduction shown at the top of the trail page before the first place is found, and afterwards in a collapsible "About this trail" section.
 
 For the live map and distances (see [config-WEL26.py](config-WEL26.py)):
 

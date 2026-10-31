@@ -83,6 +83,10 @@ body.no-scroll { overflow: hidden; }
 .steps { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 10px; }
 .steps li { display: flex; align-items: center; gap: 12px; font-weight: 600; }
 .steps span { flex: 0 0 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-text); font-weight: 800; }
+.intro { font-size: 1.05rem; line-height: 1.5; }
+.intro p { margin: 0 0 10px; }
+.steps-title { font-size: 1rem; font-weight: 800; margin: 16px 0 8px; }
+.about-section .intro { margin-top: 10px; }
 
 /* found card */
 .found-card {
@@ -227,6 +231,10 @@ body.no-scroll { overflow: hidden; }
     {% if items_found == 0 and not found %}
     <section class="card-x">
         <h1>{{ app_data['name'] }}</h1>
+        {% if app_data.get('intro') %}
+        <div class="intro">{{ app_data['intro']|safe }}</div>
+        <h2 class="steps-title">How to play</h2>
+        {% endif %}
         <ol class="steps">
             <li><span>1</span>Find a poster on the trail</li>
             <li><span>2</span>Scan its QR code</li>
@@ -379,6 +387,13 @@ body.no-scroll { overflow: hidden; }
             </article>
         {% endfor %}
         </div>
+    </details>
+    {% endif %}
+
+    {% if app_data.get('intro') and (items_found > 0 or found) %}
+    <details class="found-section about-section">
+        <summary class="section-title">About this trail <i class="bi bi-chevron-down chevron ms-auto" aria-hidden="true"></i></summary>
+        <div class="intro">{{ app_data['intro']|safe }}</div>
     </details>
     {% endif %}
 
