@@ -113,19 +113,19 @@ app_data = {
         },
         "01bcc0e5-4a76-4ab5-8ab9-7b7855f625a7": {
             "image": "wel-art/art_05.jpg",
-            "title": "The Rainbow Smile",
+            "title": "The Rainbow Cat",
             "text": imp_text(
-                "Who is this happy fellow? A smiling sun? A friendly moon? A rainbow monster? Whoever it is, they're SO happy to see you!",
+                "Miaow! Look at this happy cat with a big round face and a stripy rainbow body! How many colours can you count on its tummy?",
                 # TODO: verify the West Common racecourse fact before printing
                 "Long ago, there were horse races on the West Common, right here in the West End, for nearly 200 years!",
-                "Show your biggest, happiest smile!",
-                "Wave your arms like colourful rainbow rays.",
+                "Make cat ears with your fingers and give your happiest cat smile!",
+                "Do your best cat stretch and say \"Miaow!\"",
                 INFANT_CREDIT,
             ),
             "hint": "I've crept all the way west! Find me on <b>Hewson Road</b>, just up from busy Carholme Road. Hold your grown-up's hand!",
             "lat": 53.234227,
             "lon": -0.559184,
-            "near_text": "😊 The Rainbow Smile is right here!",
+            "near_text": "🐱 Miaow! The Rainbow Cat is right here!",
         },
         "2f1b63af-be84-4ab1-b6dd-6312a3dc2635": {
             "image": "wel-art/art_06.jpg",
