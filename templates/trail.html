@@ -167,7 +167,7 @@ body.no-scroll { overflow: hidden; }
 .complete-card { text-align: center; }
 .trophy { font-size: 3rem; line-height: 1; margin-bottom: 8px; }
 img.zoomable { cursor: zoom-in; }
-.certificate { display: block; width: 100%; border-radius: 12px; margin: 12px 0; }
+#todoTitle { scroll-margin-top: 90px; }
 
 /* bottom bar */
 .bottom-bar {
@@ -311,13 +311,14 @@ img.zoomable { cursor: zoom-in; }
         <p class="muted mb-1">You've finished the trail! Show your explorer name to a trail judge:</p>
         {% endif %}
         <div class="explorer-name-big">{{ explorer_name }}</div>
-        {% if 'certificate.png'|file_exists %}
-        <a href="{{ url_for('static', filename='certificate.pdf') }}" target="_blank" rel="noopener">
-            <img class="certificate" src="{{ url_for('static', filename='certificate.png') }}" alt="Your certificate">
-        </a>
-        <a class="btn-x btn-primary-x" href="{{ url_for('static', filename='certificate.pdf') }}" target="_blank" rel="noopener"><i class="bi bi-download"></i> Download your certificate</a>
-        {% endif %}
-        <button type="button" class="btn-x btn-ghost-x mt-2" data-bs-toggle="modal" data-bs-target="#startOverModal"><i class="bi bi-arrow-repeat"></i> Start over with a new trail</button>
+        <div class="stack mt-3">
+            <a class="btn-x btn-primary-x" href="{{ url_for('certificate') }}" target="_blank" rel="noopener"><i class="bi bi-award-fill"></i> View your certificate</a>
+            <a class="btn-x btn-ghost-x" href="{{ url_for('certificate', download=1) }}"><i class="bi bi-download"></i> Download certificate (PDF)</a>
+            {% if not all_found %}
+            <a class="btn-x btn-ghost-x" href="#todoTitle"><i class="bi bi-compass"></i> Keep exploring, {{ items_total - items_found }} more to find</a>
+            {% endif %}
+            <button type="button" class="btn-x btn-link-x" data-bs-toggle="modal" data-bs-target="#startOverModal"><i class="bi bi-arrow-repeat"></i> Start over with a new trail</button>
+        </div>
     </section>
     {% elif ns.next and (not found or just_uploaded) %}
     {% set nxt = id_dict[ns.next] %}

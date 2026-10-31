@@ -7,6 +7,8 @@ app_data = {
     "project_name": "WEL 2026 Picture Trail",
     "keywords": "qr, trail, kids, children, light, west end lights, lincoln, flask, webapp",
     "upload_folder": "static/uploads/",
+    # places needed for the certificate; leave out to require all of them
+    "required_places": 5,
     # optional, any key left out uses the default dark theme from app.py
     "theme": {
         "bg": "#0d1226",

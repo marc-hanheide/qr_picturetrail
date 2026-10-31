@@ -6,6 +6,8 @@ app_data = {
     "project_name": "WEL Picture Trail",
     "keywords": "qr, trail, kids, flask, webapp",
     "upload_folder": "static/uploads/",
+    # places needed for the certificate; leave out to require all of them
+    "required_places": 5,
     "id_dict": {
         "9509af0a-1764-4095-aa5c-20726b654146": {
             "image": "sun",

@@ -17,7 +17,7 @@ A simple Flask web app for a QR code picture trail. Participants scan QR codes p
 
 ### Trail content
 
-The trail (title, description, consent text, items with their tasks and hints) is defined in [config.py](config.py) as `app_data`. Each entry in `id_dict` is keyed by a unique ID, which is encoded in its QR code. Alternative trails are kept in separate files (e.g. [config-WEL24.py](config-WEL24.py), [config-WEL26.py](config-WEL26.py), [config-WEL26-imp.py](config-WEL26-imp.py)) and selected with the `TRAIL_CONFIG` environment variable. Item images are looked up in `static/` by the `image` name: `"sun"` means `static/sun.jpg`, while a name with an extension is used as is and may include subfolders, e.g. `"wel-art/art_01.jpg"` for `static/wel-art/art_01.jpg`.
+The trail (title, description, consent text, items with their tasks and hints) is defined in [config.py](config.py) as `app_data`. Each entry in `id_dict` is keyed by a unique ID, which is encoded in its QR code. Alternative trails are kept in separate files (e.g. [config-WEL24.py](config-WEL24.py), [config-WEL26.py](config-WEL26.py), [config-WEL26-imp.py](config-WEL26-imp.py), [config-WEL26-sparks.py](config-WEL26-sparks.py)) and selected with the `TRAIL_CONFIG` environment variable. Item images are looked up in `static/` by the `image` name: `"sun"` means `static/sun.jpg`, while a name with an extension is used as is and may include subfolders, e.g. `"wel-art/art_01.jpg"` for `static/wel-art/art_01.jpg`.
 
 Optional trail-level settings:
 
@@ -25,6 +25,8 @@ Optional trail-level settings:
 - `completion_text`: message shown once the trail is complete but not every place has been found. `{found}`, `{required}` and `{total}` are filled in.
 - `intro`: HTML introduction shown at the top of the trail page before the first place is found, and afterwards in a collapsible "About this trail" section.
 - `intro_image` / `intro_image_alt`: optional small picture (path relative to `static/`) shown beside the `intro`, with its alt text.
+
+Completed trails offer a personalised PDF at `/certificate.pdf`, with the explorer name, places found, photo count and duration.
 
 For the live map and distances (see [config-WEL26.py](config-WEL26.py)):
 
