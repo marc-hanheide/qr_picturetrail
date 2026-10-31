@@ -750,6 +750,55 @@ def poster_image(image_path, max_px=600):
     return data
 
 
+def draw_picture_frame(pdf, image, center_x, top, max_w, max_h):
+    """Draw the picture in a gilded gallery frame with a mat, centred in a max_w x max_h box below top."""
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+
+    frame, mat = 6 * mm, 5 * mm
+    border = frame + mat
+    image_w, image_h = image.getSize()
+    scale = min((max_w - 2 * border) / image_w, (max_h - 2 * border) / image_h)
+    draw_w, draw_h = image_w * scale, image_h * scale
+    outer_w, outer_h = draw_w + 2 * border, draw_h + 2 * border
+    x0, y0 = center_x - outer_w / 2, top - (max_h + outer_h) / 2
+    x1, y1 = x0 + outer_w, y0 + outer_h
+
+    pdf.setFillColor(colors.HexColor("#d9d9e0"))
+    pdf.rect(x0 + 1.5 * mm, y0 - 1.5 * mm, outer_w, outer_h, stroke=0, fill=1)
+
+    def bevel(points, colour):
+        p = pdf.beginPath()
+        p.moveTo(*points[0])
+        for pt in points[1:]:
+            p.lineTo(*pt)
+        p.close()
+        pdf.setFillColor(colors.HexColor(colour))
+        pdf.drawPath(p, stroke=0, fill=1)
+
+    ix0, iy0, ix1, iy1 = x0 + frame, y0 + frame, x1 - frame, y1 - frame
+    bevel([(x0, y1), (x1, y1), (ix1, iy1), (ix0, iy1)], "#f0cf6e")  # top, catching the light
+    bevel([(x0, y0), (x0, y1), (ix0, iy1), (ix0, iy0)], "#dfb24a")  # left
+    bevel([(x1, y0), (x1, y1), (ix1, iy1), (ix1, iy0)], "#b7871f")  # right
+    bevel([(x0, y0), (x1, y0), (ix1, iy0), (ix0, iy0)], "#9c7016")  # bottom, in shadow
+    pdf.setStrokeColor(colors.HexColor("#6f4f0e"))
+    pdf.setLineWidth(0.8)
+    pdf.rect(x0, y0, outer_w, outer_h, stroke=1, fill=0)
+    inset = frame * 0.45
+    pdf.setStrokeColor(colors.HexColor("#fff1b8"))
+    pdf.setLineWidth(0.6)
+    pdf.rect(x0 + inset, y0 + inset, outer_w - 2 * inset, outer_h - 2 * inset, stroke=1, fill=0)
+
+    pdf.setFillColor(colors.HexColor("#fbf7ec"))
+    pdf.setStrokeColor(colors.HexColor("#6f4f0e"))
+    pdf.rect(ix0, iy0, ix1 - ix0, iy1 - iy0, stroke=1, fill=1)
+    pdf.drawImage(image, x0 + border, y0 + border, draw_w, draw_h)
+    pdf.setStrokeColor(colors.HexColor("#cfc6ad"))
+    pdf.setLineWidth(0.5)
+    pdf.rect(x0 + border, y0 + border, draw_w, draw_h, stroke=1, fill=0)
+    pdf.setLineWidth(1)
+
+
 poster_lock = threading.Lock()
 
 
@@ -758,7 +807,7 @@ def posters_pdf_path(base_url):
     import hashlib
     import tempfile
 
-    key = json.dumps([base_url, app_data["name"], app_data.get("description"), app_data.get("data_consent"),
+    key = json.dumps(["poster-layout-2", base_url, app_data["name"], app_data.get("description"), app_data.get("data_consent"),
                       app_data["id_dict"], get_required_places(), get_theme()["accent"]], sort_keys=True, default=str)
     cache_dir = path.join(tempfile.gettempdir(), "qrtrail-posters")
     makedirs(cache_dir, exist_ok=True)
@@ -774,7 +823,7 @@ def posters_pdf_path(base_url):
 def build_posters_pdf(base_url, output):
     """One A4 poster per trail item, written to output (a path or file object)."""
     from reportlab.lib import colors
-    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import mm
@@ -788,9 +837,13 @@ def build_posters_pdf(base_url, output):
     dark = colors.HexColor("#14182a")
     muted = colors.HexColor("#555b70")
     accent = colors.HexColor(get_theme()["accent"])
-    body = ParagraphStyle("body", fontName="Helvetica", fontSize=10.5, leading=13.5, textColor=dark, alignment=TA_CENTER)
-    item_style = ParagraphStyle("item", fontName="Helvetica", fontSize=12.5, leading=16, textColor=dark, alignment=TA_CENTER)
+    body = ParagraphStyle("body", fontName="Helvetica", fontSize=9.5, leading=12, textColor=dark, alignment=TA_CENTER)
+    item_style = ParagraphStyle("item", fontName="Helvetica", fontSize=12.5, leading=16, textColor=dark, alignment=TA_LEFT)
     small = ParagraphStyle("small", fontName="Helvetica", fontSize=7.5, leading=9.5, textColor=muted)
+    url_style = ParagraphStyle("url", fontName="Helvetica", fontSize=7, leading=8.5, textColor=muted, alignment=TA_CENTER, wordWrap="CJK")
+    qr_size = 66 * mm  # same size on every poster
+    qr_labels_h = 22 * mm
+    item_text_w = text_width - qr_size - 8 * mm
     total = len(app_data["id_dict"])
     required = get_required_places()
     find_text = f"Find all {total} posters" if required == total else f"Find any {required} of the {total} posters"
@@ -805,7 +858,7 @@ def build_posters_pdf(base_url, output):
     _, how_h = how_to.wrap(text_width, height)
     _, consent_h = consent.wrap(text_width - 8 * mm, height)
     box_h = consent_h + 6 * mm
-    how_y = margin + box_h + 5 * mm
+    how_y = margin + box_h + 4 * mm
 
     pdf = canvas.Canvas(output, pagesize=A4, pageCompression=1)
     pdf.setTitle(f"{app_data['name']} posters")
@@ -830,41 +883,49 @@ def build_posters_pdf(base_url, output):
         pdf.drawCentredString(width / 2, y, item["title"])
         y -= 4 * mm
 
-        image_path = path.join(app.static_folder, image_file(item))
-        if path.isfile(image_path):
-            image = ImageReader(poster_image(image_path))
-            image_w, image_h = image.getSize()
-            draw_h = 30 * mm
-            draw_w = min(image_w * draw_h / image_h, text_width)
-            y -= draw_h
-            pdf.drawImage(image, (width - draw_w) / 2, y, draw_w, draw_h, preserveAspectRatio=True)
-            del image
-            y -= 4 * mm
-
-        item_text = Paragraph(poster_markup(item.get("text", "")), item_style)
-        _, text_h = item_text.wrap(text_width, height)
-        y -= text_h
-        item_text.drawOn(pdf, margin, y)
-
         # bottom up: consent box and how to take part
         pdf.setStrokeColor(colors.HexColor("#c9cdd8"))
         pdf.roundRect(margin, margin, text_width, box_h, 3 * mm, stroke=1, fill=0)
         consent.drawOn(pdf, margin + 4 * mm, margin + 3 * mm)
         how_to.drawOn(pdf, margin, how_y)
+        row_bottom = how_y + how_h + 4 * mm
 
-        # the QR code fills the space in between, with its labels below it
-        labels_h = 15 * mm
-        space_top = y - 5 * mm
-        space_bottom = how_y + how_h + 4 * mm
-        qr_size = max(60 * mm, min(120 * mm, space_top - space_bottom - labels_h))
-        qr_y = space_top - qr_size - max(0, (space_top - space_bottom - labels_h - qr_size) / 2)
-        draw_qr_vector(pdf, url, (width - qr_size) / 2, qr_y, qr_size)
+        # the item's text sits beside the QR code; shrink it, then the picture, if it does not fit
+        image_path = path.join(app.static_folder, image_file(item))
+        image_box_h = height / 3 if path.isfile(image_path) else 0
+        row_h_min = qr_size + qr_labels_h
+        font_size = 12.5
+        while True:
+            style = ParagraphStyle("item", parent=item_style, fontSize=font_size, leading=font_size * 1.28)
+            item_text = Paragraph(poster_markup(item.get("text", "")), style)
+            _, text_h = item_text.wrap(item_text_w, height)
+            row_h = max(row_h_min, text_h)
+            spare = y - image_box_h - 5 * mm - row_bottom - row_h
+            if spare >= 0 or font_size <= 9:
+                break
+            font_size -= 0.5
+        if spare < 0 and image_box_h:
+            image_box_h = max(60 * mm, image_box_h + spare)
+
+        if image_box_h:
+            image = ImageReader(poster_image(image_path, max_px=1200))
+            draw_picture_frame(pdf, image, width / 2, y, text_width, image_box_h)
+            del image
+            y -= image_box_h + 5 * mm
+
+        row_top = y - max(0, (y - row_bottom - row_h) / 2)
+        item_text.drawOn(pdf, margin, row_top - text_h)
+
+        qr_x = width - margin - qr_size
+        qr_y = row_top - qr_size
+        draw_qr_vector(pdf, url, qr_x, qr_y, qr_size)
         pdf.setFillColor(dark)
-        pdf.setFont("Helvetica-Bold", 16)
-        pdf.drawCentredString(width / 2, qr_y - 7 * mm, "Scan me with your phone camera!")
-        pdf.setFillColor(muted)
-        pdf.setFont("Helvetica", 9)
-        pdf.drawCentredString(width / 2, qr_y - 12 * mm, url)
+        pdf.setFont("Helvetica-Bold", 14)
+        pdf.drawCentredString(qr_x + qr_size / 2, qr_y - 5.5 * mm, "Scan me with your")
+        pdf.drawCentredString(qr_x + qr_size / 2, qr_y - 10.5 * mm, "phone camera!")
+        url_text = Paragraph(html.escape(url), url_style)
+        _, url_h = url_text.wrap(qr_size, height)
+        url_text.drawOn(pdf, qr_x, qr_y - 12.5 * mm - url_h)
 
         pdf.setFillColor(muted)
         pdf.setFont("Helvetica", 8)
