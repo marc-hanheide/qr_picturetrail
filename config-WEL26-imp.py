@@ -48,11 +48,11 @@ app_data = {
             {"max_distance": 120, "text": "Keep going, explorer! {title} is close by.", "highlight": "info"},
         ],
     },
-    # Stop N shows static/wel-art/art_NN.png and stands at point N of trail.geojson.
+    # Stop N shows static/wel-art/art_NN.jpg and stands at point N of trail.geojson.
     # TODO: hints are drafted from OpenStreetMap, check them on site before printing
     "id_dict": {
         "3017ce13-d4e2-48d0-8416-8b0754c95882": {
-            "image": "wel-art/art_01.png",
+            "image": "wel-art/art_01.jpg",
             "title": "The Dotty House",
             "text": imp_text(
                 "So many dots! Pink dots, blue dots, green dots, orange dots. This house is the dottiest house I've ever seen!",
@@ -67,7 +67,7 @@ app_data = {
             "near_text": "🔴🟢🔵 Dotty dotty! The Dotty House is right here!",
         },
         "137d6fba-5478-4b58-af59-2506a1260276": {
-            "image": "wel-art/art_02.png",
+            "image": "wel-art/art_02.jpg",
             "title": "The Golden Creature",
             "text": imp_text(
                 "Who is THIS golden creature? Is it a lizard? A dragon? Maybe it's one of my imp cousins! What do YOU think it is?",
@@ -82,7 +82,7 @@ app_data = {
             "near_text": "✨ Who's that? The Golden Creature is right here!",
         },
         "3e26a088-1169-4d82-a45b-55d940948ab0": {
-            "image": "wel-art/art_03.png",
+            "image": "wel-art/art_03.jpg",
             "title": "The Big Green Tree",
             "text": imp_text(
                 "What a big, bright tree! It has red baubles and a shiny golden star on top. How many baubles can you count?",
@@ -97,7 +97,7 @@ app_data = {
             "near_text": "🎄 The Big Green Tree is right here!",
         },
         "6eebd755-0627-40da-8af1-a712705f2b93": {
-            "image": "wel-art/art_04.png",
+            "image": "wel-art/art_04.jpg",
             "title": "The Starry Parade",
             "text": imp_text(
                 "Stars everywhere! And look at that long line with little windows. Is it a train? A rocket? A street of tiny houses? You decide!",
@@ -112,7 +112,7 @@ app_data = {
             "near_text": "🌟 The Starry Parade is right here!",
         },
         "01bcc0e5-4a76-4ab5-8ab9-7b7855f625a7": {
-            "image": "wel-art/art_05.png",
+            "image": "wel-art/art_05.jpg",
             "title": "The Rainbow Smile",
             "text": imp_text(
                 "Who is this happy fellow? A smiling sun? A friendly moon? A rainbow monster? Whoever it is, they're SO happy to see you!",
@@ -128,7 +128,7 @@ app_data = {
             "near_text": "😊 The Rainbow Smile is right here!",
         },
         "2f1b63af-be84-4ab1-b6dd-6312a3dc2635": {
-            "image": "wel-art/art_06.png",
+            "image": "wel-art/art_06.jpg",
             "title": "The Wiggly Fairy Lights",
             "text": imp_text(
                 "Red, yellow, green, blue! A long string of fairy lights wiggles right across this picture, with fizzy fireworks all around. Can you spot any letters hiding in there?",
@@ -143,7 +143,7 @@ app_data = {
             "near_text": "💡 Wiggle wiggle! The Wiggly Fairy Lights are right here!",
         },
         "71e2c65c-296b-452a-b7ce-a33c9c459508": {
-            "image": "wel-art/art_07.png",
+            "image": "wel-art/art_07.jpg",
             "title": "The Star Over the Rooftops",
             "text": imp_text(
                 "Ooh, look! A giant star is shining down on a row of cosy houses. Can you count how many houses there are?",
@@ -158,7 +158,7 @@ app_data = {
             "near_text": "⭐ Twinkle twinkle! The Star Over the Rooftops is right here!",
         },
         "ed45a33a-4baa-4652-a2a2-f17f492c5e7e": {
-            "image": "wel-art/art_08.png",
+            "image": "wel-art/art_08.jpg",
             "title": "The Midnight Castle",
             "text": imp_text(
                 "Wow! A golden building glowing in the middle of the night. It reminds me of my home, the Cathedral! Can you spot the rooftop wearing a Santa hat?",
@@ -173,7 +173,7 @@ app_data = {
             "near_text": "🏰 The Midnight Castle is glowing right here!",
         },
         "282dde8b-cdec-468a-8eb9-419cea9eeff3": {
-            "image": "wel-art/art_09.png",
+            "image": "wel-art/art_09.jpg",
             "title": "The Rainbow Swirl Sky",
             "text": imp_text(
                 "Swirly whirly! This sky is full of every colour I can think of. Which colour is your favourite?",
@@ -188,7 +188,7 @@ app_data = {
             "near_text": "🌈 Swirly whirly! The Rainbow Swirl Sky is right here!",
         },
         "b44c4d83-ea59-480e-921c-af657207e47e": {
-            "image": "wel-art/art_10.png",
+            "image": "wel-art/art_10.jpg",
             "title": "The Window Theatre",
             "text": imp_text(
                 "Ta-da! The curtains are open and the show is about to begin! What do you think is happening behind that window?",
@@ -203,7 +203,7 @@ app_data = {
             "near_text": "🎭 Ta-da! The Window Theatre is right here!",
         },
         "0ffcb0fc-a00d-47ba-9813-58303daa94e4": {
-            "image": "wel-art/art_11.png",
+            "image": "wel-art/art_11.jpg",
             "title": "The Cathedral on the Hill",
             "text": imp_text(
                 "Look who's up on the hill! It's MY house, Lincoln Cathedral! Down below, families are out for a wintry walk past the twinkly houses. Can you spot the dog? And the sledge with a present on it?",
