@@ -12,14 +12,15 @@
 {% macro place_image(item, cls) -%}
     {%- set img = image_file(id_dict[item]) -%}
     {%- if img|file_exists -%}
-        <img class="{{ cls }}" src="{{ url_for('static', filename=img) }}" alt="" loading="lazy">
+        <img class="{{ cls }} zoomable" src="{{ url_for('static', filename=img) }}" alt="" loading="lazy" data-caption="{{ id_dict[item]['title'] }}"
+            {%- if cls != 'place-thumb' %} tabindex="0" role="button" aria-label="Show the picture {{ id_dict[item]['title'] }} in full"{% endif %}>
     {%- else -%}
         <div class="{{ cls }} placeholder" aria-hidden="true"><i class="bi bi-stars"></i></div>
     {%- endif -%}
 {%- endmacro %}
 {% macro intro_block() -%}
 <div class="intro">
-    {% if app_data.get('intro_image') %}<img class="intro-image" src="{{ url_for('static', filename=app_data['intro_image']) }}" alt="{{ app_data.get('intro_image_alt', '') }}">{% endif %}
+    {% if app_data.get('intro_image') %}<img class="intro-image zoomable" tabindex="0" role="button" src="{{ url_for('static', filename=app_data['intro_image']) }}" alt="{{ app_data.get('intro_image_alt', '') }}" data-caption="{{ app_data.get('intro_image_alt', '') }}">{% endif %}
     {{ app_data['intro']|safe }}
 </div>
 {%- endmacro %}
@@ -165,6 +166,7 @@ body.no-scroll { overflow: hidden; }
 /* complete */
 .complete-card { text-align: center; }
 .trophy { font-size: 3rem; line-height: 1; margin-bottom: 8px; }
+img.zoomable { cursor: zoom-in; }
 .certificate { display: block; width: 100%; border-radius: 12px; margin: 12px 0; }
 
 /* bottom bar */
@@ -261,7 +263,7 @@ body.no-scroll { overflow: hidden; }
         {% if just_uploaded %}
             <div class="eyebrow success"><i class="bi bi-check-circle-fill"></i> Photo uploaded</div>
             <h1 id="foundTitle">Great photo!</h1>
-            {% if my_photos %}<img class="uploaded-photo" src="{{ my_photos[-1] }}" alt="Your photo at {{ place['title'] }}">{% endif %}
+            {% if my_photos %}<img class="uploaded-photo zoomable" tabindex="0" role="button" src="{{ my_photos[-1] }}" alt="Your photo at {{ place['title'] }}" data-caption="Your photo">{% endif %}
         {% else %}
             <div class="eyebrow">🎉 You found it!</div>
             <h1 id="foundTitle">{{ place['title'] }}</h1>
@@ -435,14 +437,14 @@ body.no-scroll { overflow: hidden; }
 
 <!-- Photo viewer -->
 <div class="modal fade" id="photoModal" tabindex="-1" aria-label="Your photo" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
             <div class="modal-header border-0">
-                <h5 class="modal-title">Your photo</h5>
+                <h5 class="modal-title" id="photoModalTitle">Your photo</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body pt-0 text-center">
-                <img id="modalPhoto" src="" alt="Your photo" class="img-fluid rounded" style="max-height: 70vh;">
+                <img id="modalPhoto" src="" alt="Your photo" class="img-fluid rounded" style="max-height: 80vh;">
             </div>
         </div>
     </div>
@@ -740,10 +742,31 @@ document.querySelectorAll('.place-head[aria-controls]').forEach(btn => btn.addEv
     document.getElementById(btn.getAttribute('aria-controls')).hidden = open;
 }));
 
-document.querySelectorAll('.photo-thumb').forEach(btn => btn.addEventListener('click', () => {
-    document.getElementById('modalPhoto').src = btn.dataset.src;
+function showImage(src, caption) {
+    const photo = document.getElementById('modalPhoto');
+    photo.src = src;
+    photo.alt = caption;
+    document.getElementById('photoModalTitle').textContent = caption;
+    document.getElementById('photoModal').setAttribute('aria-label', caption);
     bootstrap.Modal.getOrCreateInstance(document.getElementById('photoModal')).show();
-}));
+}
+
+document.querySelectorAll('.photo-thumb').forEach(btn => btn.addEventListener('click', () => showImage(btn.dataset.src, 'Your photo')));
+
+// Capture phase, so a tap on a list thumbnail opens the picture instead of toggling its hint
+document.addEventListener('click', e => {
+    const img = e.target.closest('img.zoomable');
+    if (!img) return;
+    e.preventDefault();
+    e.stopPropagation();
+    showImage(img.currentSrc || img.src, img.dataset.caption || img.alt || '');
+}, true);
+document.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('img.zoomable')) {
+        e.preventDefault();
+        e.target.click();
+    }
+});
 
 // ---------- distances to places ----------
 function haversine(lat1, lon1, lat2, lon2) {
