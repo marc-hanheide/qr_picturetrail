@@ -30,6 +30,9 @@ app_data = {
         "St Faith and St Martin Junior School, and they're my favourite pictures EVER!</p>"
         "<p>Can you find <b>6</b> of them? Use my clues to find them, and grown-ups, please help little explorers stay safe near roads.</p>"
     ),
+    # photo by Hongking, public domain: https://commons.wikimedia.org/wiki/File:Lincoln_imp.jpg
+    "intro_image": "wel-art/lincoln-imp.jpg",
+    "intro_image_alt": "The real Lincoln Imp, a little stone carving high up inside Lincoln Cathedral",
     "required_places": 6,
     # {found}, {required} and {total} are filled in; shown once enough places are found, until all are
     "completion_text": "You did it! You've found {found} of my pictures, so you're an official Imp Gallery Explorer! There are more pictures still hiding if you want to keep looking.",

@@ -17,6 +17,12 @@
         <div class="{{ cls }} placeholder" aria-hidden="true"><i class="bi bi-stars"></i></div>
     {%- endif -%}
 {%- endmacro %}
+{% macro intro_block() -%}
+<div class="intro">
+    {% if app_data.get('intro_image') %}<img class="intro-image" src="{{ url_for('static', filename=app_data['intro_image']) }}" alt="{{ app_data.get('intro_image_alt', '') }}">{% endif %}
+    {{ app_data['intro']|safe }}
+</div>
+{%- endmacro %}
 
 {% block bodyattrs %}class="trail-page" data-bs-theme="dark"{% endblock %}
 
@@ -85,6 +91,8 @@ body.no-scroll { overflow: hidden; }
 .steps span { flex: 0 0 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-text); font-weight: 800; }
 .intro { font-size: 1.05rem; line-height: 1.5; }
 .intro p { margin: 0 0 10px; }
+.intro::after { content: ""; display: block; clear: both; }
+.intro-image { float: right; width: 110px; height: 110px; object-fit: cover; margin: 2px 0 8px 12px; border-radius: 16px; border: 3px solid var(--accent); box-shadow: 0 4px 14px rgba(0,0,0,.35); }
 .steps-title { font-size: 1rem; font-weight: 800; margin: 16px 0 8px; }
 .about-section .intro { margin-top: 10px; }
 
@@ -232,7 +240,7 @@ body.no-scroll { overflow: hidden; }
     <section class="card-x">
         <h1>{{ app_data['name'] }}</h1>
         {% if app_data.get('intro') %}
-        <div class="intro">{{ app_data['intro']|safe }}</div>
+        {{ intro_block() }}
         <h2 class="steps-title">How to play</h2>
         {% endif %}
         <ol class="steps">
@@ -393,7 +401,7 @@ body.no-scroll { overflow: hidden; }
     {% if app_data.get('intro') and (items_found > 0 or found) %}
     <details class="found-section about-section">
         <summary class="section-title">About this trail <i class="bi bi-chevron-down chevron ms-auto" aria-hidden="true"></i></summary>
-        <div class="intro">{{ app_data['intro']|safe }}</div>
+        {{ intro_block() }}
     </details>
     {% endif %}
 
