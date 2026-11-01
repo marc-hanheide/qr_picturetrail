@@ -17,13 +17,22 @@ A simple Flask web app for a QR code picture trail. Participants scan QR codes p
 
 ### Trail content
 
-The trail (title, description, consent text, items with their tasks and hints) is defined in [config.py](config.py) as `app_data`. Each entry in `id_dict` is keyed by a unique ID, which is encoded in its QR code. Alternative trails are kept in separate files (e.g. [config-WEL24.py](config-WEL24.py), [config-WEL26.py](config-WEL26.py)) and selected with the `TRAIL_CONFIG` environment variable. Item images are looked up in `static/` by the `image` name.
+The trail (title, description, consent text, items with their tasks and hints) is defined in [config.py](config.py) as `app_data`. Each entry in `id_dict` is keyed by a unique ID, which is encoded in its QR code. Alternative trails are kept in separate files (e.g. [config-WEL24.py](config-WEL24.py), [config-WEL26.py](config-WEL26.py), [config-WEL26-imp.py](config-WEL26-imp.py), [config-WEL26-sparks.py](config-WEL26-sparks.py)) and selected with the `TRAIL_CONFIG` environment variable. Item images are looked up in `static/` by the `image` name: `"sun"` means `static/sun.jpg`, while a name with an extension is used as is and may include subfolders, e.g. `"wel-art/art_01.jpg"` for `static/wel-art/art_01.jpg`.
+
+Optional trail-level settings:
+
+- `required_places`: number of places needed to complete the trail (default: all). With e.g. `6` of 11, the trail page says "find any 6 of the 11 places", unlocks the certificate after 6 and lists the remaining places as bonus places.
+- `completion_text`: message shown once the trail is complete but not every place has been found. `{found}`, `{required}` and `{total}` are filled in.
+- `finish_text`: message shown under the trophy once the trail is complete, above the certificate buttons (e.g. where to claim a prize). Same placeholders as `completion_text`. Defaults to a short neutral line pointing to the certificate.
+- `intro`: HTML introduction shown at the top of the trail page before the first place is found, and afterwards in a collapsible "About this trail" section.
+- `intro_image` / `intro_image_alt`: optional small picture (path relative to `static/`) shown beside the `intro`, with its alt text.
+
+Completed trails offer a personalised PDF at `/certificate.pdf`, with the explorer name, places found, photo count and duration.
 
 For the live map and distances (see [config-WEL26.py](config-WEL26.py)):
 
 - each `id_dict` entry needs `lat` and `lon` (decimal degrees), and may set `near_text` (message when very close) and `photo_side` (`top`, `bottom`, `left` or `right`, to stop nearby photos overlapping on the map);
 - `map` sets the Mapbox `style`, `center`, `zoom`, `bounds`, `pitch`, `bearing`, `label_opacity`, `photo_size` and `stats_position`;
-- `required_places` (optional) is how many places a participant must find to complete the trail and get the certificate. Defaults to all places; when lower, the trail page asks for "any N of the M places" and lets people keep exploring after completing.
 - `proximity` sets the distance `tiers` (`max_distance`, `text`, `highlight`, `vibrate`), `far_text`, `hysteresis_m` and `update_interval_s`. Texts may use `{title}` and `{distance}`.
 - `theme` (optional) sets the trail page colours: `bg`, `surface`, `surface_2`, `text`, `muted`, `accent`, `accent_text`, `success`, `info`, `danger`. Missing keys fall back to the defaults in `DEFAULT_THEME` in [app.py](app.py).
 
@@ -81,6 +90,8 @@ docker compose up -d
 ```
 
 The image is built from [.devcontainer/Dockerfile](.devcontainer/Dockerfile), the project folder is mounted to `/app` (so uploads and `log.csv` persist on the host) and port `5999` is exposed. `TRAIL_ADMIN_ACCESS_TOKEN` and `TRAIL_CONFIG` are taken from `.env`.
+
+Participants' progress is kept in a signed browser cookie, so the signing key must not change between restarts. It is taken from `TRAIL_SECRET_KEY` if set, otherwise derived from `TRAIL_ADMIN_ACCESS_TOKEN`. Set `TRAIL_SECRET_KEY` explicitly if you ever change the admin token, as changing the key signs everybody out. Server-side records and photos live in the `uploads` volume and survive restarts (but not `docker compose down -v`).
 
 ### Public deployment
 

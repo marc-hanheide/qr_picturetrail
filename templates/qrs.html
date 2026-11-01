@@ -54,10 +54,10 @@
         <div class="row qr-row">
             <h2>{{ app_data['id_dict'][item]['title'] }}</h2>
             <p>{{ app_data['id_dict'][item]['text']|safe }}</p>
-            {% set image_filename = app_data['id_dict'][item]['image'] + ".jpg" %}
+            {% set image_filename = image_file(app_data['id_dict'][item]) %}
             {% if image_filename|file_exists %}
             <div class="col-md-6">
-                <a href="../static/{{ app_data['id_dict'][item]['image'] }}.jpg"><img src="../static/{{ app_data['id_dict'][item]['image'] }}.jpg" class="img-fluid" alt="{{ item }}" /></a>
+                <a href="{{ url_for('static', filename=image_filename) }}"><img src="{{ url_for('static', filename=image_filename) }}" class="img-fluid" alt="{{ item }}" /></a>
             </div>
             <div class="col-md-6">
                 <a href="{{ base_url + "trail?id=" + item }}">

@@ -3,19 +3,26 @@
 {% set id_dict = app_data['id_dict'] %}
 {% set complete = items_found >= items_required %}
 {% set all_found = items_found == items_total %}
-{% set partial = items_required < items_total %}
+{% set goal = items_total if complete else items_required %}
 {% set has_geo = id_dict.values()|selectattr('lat', 'defined')|list|length > 0 %}
 {% set ns = namespace(next=None) %}
 {% set explorer_name = session['id']|replace('-', ' ')|title %}
 {% for item in id_dict %}{% if not session['found_' + item] and ns.next is none %}{% set ns.next = item %}{% endif %}{% endfor %}
 
 {% macro place_image(item, cls) -%}
-    {%- set img = id_dict[item]['image'] + '.jpg' -%}
+    {%- set img = image_file(id_dict[item]) -%}
     {%- if img|file_exists -%}
-        <img class="{{ cls }}" src="{{ url_for('static', filename=img) }}" alt="" loading="lazy">
+        <img class="{{ cls }} zoomable" src="{{ url_for('static', filename=img) }}" alt="" loading="lazy" data-caption="{{ id_dict[item]['title'] }}"
+            {%- if cls != 'place-thumb' %} tabindex="0" role="button" aria-label="Show the picture {{ id_dict[item]['title'] }} in full"{% endif %}>
     {%- else -%}
         <div class="{{ cls }} placeholder" aria-hidden="true"><i class="bi bi-stars"></i></div>
     {%- endif -%}
+{%- endmacro %}
+{% macro intro_block() -%}
+<div class="intro">
+    {% if app_data.get('intro_image') %}<img class="intro-image zoomable" tabindex="0" role="button" src="{{ url_for('static', filename=app_data['intro_image']) }}" alt="{{ app_data.get('intro_image_alt', '') }}" data-caption="{{ app_data.get('intro_image_alt', '') }}">{% endif %}
+    {{ app_data['intro']|safe }}
+</div>
 {%- endmacro %}
 
 {% block bodyattrs %}class="trail-page" data-bs-theme="dark"{% endblock %}
@@ -83,6 +90,12 @@ body.no-scroll { overflow: hidden; }
 .steps { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 10px; }
 .steps li { display: flex; align-items: center; gap: 12px; font-weight: 600; }
 .steps span { flex: 0 0 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-text); font-weight: 800; }
+.intro { font-size: 1.05rem; line-height: 1.5; }
+.intro p { margin: 0 0 10px; }
+.intro::after { content: ""; display: block; clear: both; }
+.intro-image { float: right; width: 110px; height: 110px; object-fit: cover; margin: 2px 0 8px 12px; border-radius: 16px; border: 3px solid var(--accent); box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+.steps-title { font-size: 1rem; font-weight: 800; margin: 16px 0 8px; }
+.about-section .intro { margin-top: 10px; }
 
 /* found card */
 .found-card {
@@ -153,6 +166,7 @@ body.no-scroll { overflow: hidden; }
 /* complete */
 .complete-card { text-align: center; }
 .trophy { font-size: 3rem; line-height: 1; margin-bottom: 8px; }
+img.zoomable { cursor: zoom-in; }
 #todoTitle { scroll-margin-top: 90px; }
 
 /* bottom bar */
@@ -204,12 +218,12 @@ body.no-scroll { overflow: hidden; }
         <div class="topbar-title">{{ app_data['project_name'] }}</div>
         <div class="explorer">You are <strong>{{ explorer_name }}</strong></div>
     </div>
-    <div class="progress-pill" role="img" aria-label="{{ items_found }} of {{ items_required }} places found">
+    <div class="progress-pill" role="img" aria-label="{{ items_found }} of {{ goal }} places found">
         <svg class="ring" viewBox="0 0 36 36" aria-hidden="true">
             <circle class="ring-bg" cx="18" cy="18" r="15"/>
-            <circle class="ring-fg" cx="18" cy="18" r="15" stroke-dasharray="{{ '%.2f'|format(94.25 * [items_found, items_required]|min / items_required) }} 94.25"{% if items_found == 0 %} hidden{% endif %}/>
+            <circle class="ring-fg" cx="18" cy="18" r="15" stroke-dasharray="{{ '%.2f'|format(94.25 * items_found / goal) }} 94.25"{% if items_found == 0 %} hidden{% endif %}/>
         </svg>
-        <span><strong>{{ items_found }}</strong>/{{ items_total if items_found > items_required else items_required }}</span>
+        <span><strong>{{ items_found }}</strong>/{{ goal }}</span>
     </div>
 </header>
 
@@ -227,14 +241,18 @@ body.no-scroll { overflow: hidden; }
     {% if items_found == 0 and not found %}
     <section class="card-x">
         <h1>{{ app_data['name'] }}</h1>
-        {% if partial %}
-        <p class="muted">Find any <strong>{{ items_required }}</strong> of the {{ items_total }} places to complete the trail.</p>
+        {% if app_data.get('intro') %}
+        {{ intro_block() }}
+        <h2 class="steps-title">How to play</h2>
         {% endif %}
         <ol class="steps">
             <li><span>1</span>Find a poster on the trail</li>
             <li><span>2</span>Scan its QR code</li>
             <li><span>3</span>Do the fun photo challenge</li>
         </ol>
+        {% if items_required < items_total %}
+        <p class="muted mb-0">Find any <strong>{{ items_required }}</strong> of the {{ items_total }} places to finish the trail.</p>
+        {% endif %}
     </section>
     {% endif %}
 
@@ -245,7 +263,7 @@ body.no-scroll { overflow: hidden; }
         {% if just_uploaded %}
             <div class="eyebrow success"><i class="bi bi-check-circle-fill"></i> Photo uploaded</div>
             <h1 id="foundTitle">Great photo!</h1>
-            {% if my_photos %}<img class="uploaded-photo" src="{{ my_photos[-1] }}" alt="Your photo at {{ place['title'] }}">{% endif %}
+            {% if my_photos %}<img class="uploaded-photo zoomable" tabindex="0" role="button" src="{{ my_photos[-1] }}" alt="Your photo at {{ place['title'] }}" data-caption="Your photo">{% endif %}
         {% else %}
             <div class="eyebrow">🎉 You found it!</div>
             <h1 id="foundTitle">{{ place['title'] }}</h1>
@@ -287,11 +305,11 @@ body.no-scroll { overflow: hidden; }
         {% if all_found %}
         <h1>You found all {{ items_total }} places!</h1>
         {% else %}
-        <h1>You completed the trail!</h1>
-        <p class="muted mb-1">You found {{ items_found }} of the {{ items_total }} places.</p>
+        <h1>You found {{ items_found }} of the {{ items_total }} places!</h1>
+        {% if app_data.get('completion_text') %}<p>{{ app_data['completion_text']|replace('{found}', items_found|string)|replace('{required}', items_required|string)|replace('{total}', items_total|string)|safe }}</p>{% endif %}
         {% endif %}
-        <p class="muted mb-1">Amazing work! Show your explorer name to a trail judge:</p>
         <div class="explorer-name-big">{{ explorer_name }}</div>
+        <p class="muted mt-3 mb-0">{{ (app_data.get('finish_text') or "You've finished the trail! Here is your certificate:")|replace('{found}', items_found|string)|replace('{required}', items_required|string)|replace('{total}', items_total|string)|safe }}</p>
         <div class="stack mt-3">
             <a class="btn-x btn-primary-x" href="{{ url_for('certificate') }}" target="_blank" rel="noopener"><i class="bi bi-award-fill"></i> View your certificate</a>
             <a class="btn-x btn-ghost-x" href="{{ url_for('certificate', download=1) }}"><i class="bi bi-download"></i> Download certificate (PDF)</a>
@@ -320,15 +338,7 @@ body.no-scroll { overflow: hidden; }
 
     {% if not all_found %}
     <section aria-labelledby="todoTitle">
-        {% if complete %}
-        <h2 class="section-title" id="todoTitle">Keep exploring <span class="count">{{ items_total - items_found }}</span></h2>
-        <p class="muted mx-1 mb-0">You've got your certificate, but there are still more places to discover if you like.</p>
-        {% elif partial %}
-        <h2 class="section-title" id="todoTitle">Find {{ items_required - items_found }} more <span class="count">{{ items_total - items_found }} left</span></h2>
-        <p class="muted mx-1 mb-0">Any of these places count.</p>
-        {% else %}
-        <h2 class="section-title" id="todoTitle">Still to find <span class="count">{{ items_total - items_found }}</span></h2>
-        {% endif %}
+        <h2 class="section-title" id="todoTitle">{{ 'Bonus places still hiding' if complete else 'Still to find' }} <span class="count">{{ items_total - items_found }}</span></h2>
         {% if has_geo %}
         <div id="geoControls" class="notice mt-2" hidden>
             <span id="geoStatus"></span>
@@ -390,6 +400,13 @@ body.no-scroll { overflow: hidden; }
     </details>
     {% endif %}
 
+    {% if app_data.get('intro') and (items_found > 0 or found) %}
+    <details class="found-section about-section">
+        <summary class="section-title">About this trail <i class="bi bi-chevron-down chevron ms-auto" aria-hidden="true"></i></summary>
+        {{ intro_block() }}
+    </details>
+    {% endif %}
+
     <footer class="trail-footer">
         <button type="button" class="link-btn" data-bs-toggle="modal" data-bs-target="#privacyModal">Privacy &amp; consent</button>
         <button type="button" class="link-btn danger" data-bs-toggle="modal" data-bs-target="#startOverModal">Start over</button>
@@ -420,14 +437,14 @@ body.no-scroll { overflow: hidden; }
 
 <!-- Photo viewer -->
 <div class="modal fade" id="photoModal" tabindex="-1" aria-label="Your photo" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
             <div class="modal-header border-0">
-                <h5 class="modal-title">Your photo</h5>
+                <h5 class="modal-title" id="photoModalTitle">Your photo</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body pt-0 text-center">
-                <img id="modalPhoto" src="" alt="Your photo" class="img-fluid rounded" style="max-height: 70vh;">
+                <img id="modalPhoto" src="" alt="Your photo" class="img-fluid rounded" style="max-height: 80vh;">
             </div>
         </div>
     </div>
@@ -725,10 +742,31 @@ document.querySelectorAll('.place-head[aria-controls]').forEach(btn => btn.addEv
     document.getElementById(btn.getAttribute('aria-controls')).hidden = open;
 }));
 
-document.querySelectorAll('.photo-thumb').forEach(btn => btn.addEventListener('click', () => {
-    document.getElementById('modalPhoto').src = btn.dataset.src;
+function showImage(src, caption) {
+    const photo = document.getElementById('modalPhoto');
+    photo.src = src;
+    photo.alt = caption;
+    document.getElementById('photoModalTitle').textContent = caption;
+    document.getElementById('photoModal').setAttribute('aria-label', caption);
     bootstrap.Modal.getOrCreateInstance(document.getElementById('photoModal')).show();
-}));
+}
+
+document.querySelectorAll('.photo-thumb').forEach(btn => btn.addEventListener('click', () => showImage(btn.dataset.src, 'Your photo')));
+
+// Capture phase, so a tap on a list thumbnail opens the picture instead of toggling its hint
+document.addEventListener('click', e => {
+    const img = e.target.closest('img.zoomable');
+    if (!img) return;
+    e.preventDefault();
+    e.stopPropagation();
+    showImage(img.currentSrc || img.src, img.dataset.caption || img.alt || '');
+}, true);
+document.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('img.zoomable')) {
+        e.preventDefault();
+        e.target.click();
+    }
+});
 
 // ---------- distances to places ----------
 function haversine(lat1, lon1, lat2, lon2) {
