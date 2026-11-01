@@ -304,13 +304,12 @@ img.zoomable { cursor: zoom-in; }
         <div class="trophy">🏆</div>
         {% if all_found %}
         <h1>You found all {{ items_total }} places!</h1>
-        <p class="muted mb-1">Amazing work! Show your explorer name to a trail judge:</p>
         {% else %}
         <h1>You found {{ items_found }} of the {{ items_total }} places!</h1>
         {% if app_data.get('completion_text') %}<p>{{ app_data['completion_text']|replace('{found}', items_found|string)|replace('{required}', items_required|string)|replace('{total}', items_total|string)|safe }}</p>{% endif %}
-        <p class="muted mb-1">You've finished the trail! Show your explorer name to a trail judge:</p>
         {% endif %}
         <div class="explorer-name-big">{{ explorer_name }}</div>
+        <p class="muted mt-3 mb-0">{{ (app_data.get('finish_text') or "You've finished the trail! Here is your certificate:")|replace('{found}', items_found|string)|replace('{required}', items_required|string)|replace('{total}', items_total|string)|safe }}</p>
         <div class="stack mt-3">
             <a class="btn-x btn-primary-x" href="{{ url_for('certificate') }}" target="_blank" rel="noopener"><i class="bi bi-award-fill"></i> View your certificate</a>
             <a class="btn-x btn-ghost-x" href="{{ url_for('certificate', download=1) }}"><i class="bi bi-download"></i> Download certificate (PDF)</a>

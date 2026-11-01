@@ -36,6 +36,8 @@ app_data = {
     "required_places": 6,
     # {found}, {required} and {total} are filled in; shown once enough places are found, until all are
     "completion_text": "You did it! You've found {found} of my pictures, so you're an official Imp Gallery Explorer! There are more pictures still hiding if you want to keep looking.",
+    # shown under the trophy once the trail is complete, before the certificate buttons; same placeholders
+    "finish_text": "Here's your very own certificate. Keep it safe, and show it if anyone asks to see that you finished the trail!",
     "theme": {
         "bg": "#141030",
         "accent": "#ffcf5c",
