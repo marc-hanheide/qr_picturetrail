@@ -315,6 +315,15 @@ def update_session_with_item(session_id, item_id, item_name):
     return session_data
 
 
+def restore_found_items(session_id):
+    """Re-create server-side records of places the browser's cookie says are found (e.g. after the data was lost)."""
+    missing = [item for item in app_data["id_dict"]
+               if session.get("found_" + item) and item not in load_session_data(session_id)["items_found"]]
+    for item in missing:
+        update_session_with_item(session_id, item, image_slug(app_data["id_dict"][item]))
+    return bool(missing)
+
+
 def add_photo_to_session(session_id, item_id, filename):
     """Add a photo record to the session data."""
     session_data = load_session_data(session_id)
@@ -661,6 +670,7 @@ def trail():
         if session["found_" + item] == True:
             items_found += 1
     items_total = len(app_data["id_dict"])
+    restore_found_items(session["id"])
 
     if id in app_data["id_dict"]:
         try:
@@ -918,6 +928,7 @@ def build_certificate_pdf(output, explorer_name, visits, photo_count, completed_
 @app.route("/certificate.pdf")
 def certificate():
     initialise_session()
+    restore_found_items(session["id"])
     session_data = load_session_data(session["id"])
     found = session_data.get("items_found", {})
     visits = sorted(
