@@ -13,6 +13,7 @@ services:
       - "5999:5999"
     environment:
       - TRAIL_ADMIN_ACCESS_TOKEN=${TRAIL_ADMIN_ACCESS_TOKEN}
+      - TRAIL_SECRET_KEY=${TRAIL_SECRET_KEY:-}
       - TRAIL_CONFIG=${TRAIL_CONFIG:-config.py}
       - TRAIL_LOG_FILE=/app/static/uploads/qrtrail.log
       - MAPBOX_TOKEN=${MAPBOX_TOKEN}

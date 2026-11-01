@@ -91,6 +91,8 @@ docker compose up -d
 
 The image is built from [.devcontainer/Dockerfile](.devcontainer/Dockerfile), the project folder is mounted to `/app` (so uploads and `log.csv` persist on the host) and port `5999` is exposed. `TRAIL_ADMIN_ACCESS_TOKEN` and `TRAIL_CONFIG` are taken from `.env`.
 
+Participants' progress is kept in a signed browser cookie, so the signing key must not change between restarts. It is taken from `TRAIL_SECRET_KEY` if set, otherwise derived from `TRAIL_ADMIN_ACCESS_TOKEN`. Set `TRAIL_SECRET_KEY` explicitly if you ever change the admin token, as changing the key signs everybody out. Server-side records and photos live in the `uploads` volume and survive restarts (but not `docker compose down -v`).
+
 ### Public deployment
 
 The app respects `X-Forwarded-Proto` and `X-Forwarded-For`, so it can run behind a reverse proxy or tunnel. Generated QR codes use the host the admin page was accessed from, so open `/qrs` via the public URL before printing.

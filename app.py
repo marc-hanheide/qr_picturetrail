@@ -10,6 +10,7 @@ https://github.com/petersimeth/basic-flask-template
 # Standard library imports
 import re
 import io
+import hashlib
 import html
 import json
 import os
@@ -66,8 +67,24 @@ def generate_session_id():
 
 DEVELOPMENT_ENV = True
 
+def load_secret_key():
+    """Stable signing key for session cookies, so a restart does not log participants out.
+
+    TRAIL_SECRET_KEY wins; otherwise it is derived from TRAIL_ADMIN_ACCESS_TOKEN. Without either, the key is
+    random per start and all sessions are lost on restart.
+    """
+    explicit = os.environ.get("TRAIL_SECRET_KEY", "").strip()
+    if explicit:
+        return explicit.encode()
+    admin_token = os.environ.get("TRAIL_ADMIN_ACCESS_TOKEN", "")
+    if admin_token:
+        return hashlib.sha256(b"qrtrail-session-key:" + admin_token.encode()).digest()
+    print("WARNING: set TRAIL_SECRET_KEY (or TRAIL_ADMIN_ACCESS_TOKEN) to keep participants' progress across restarts.")
+    return uuid4().bytes
+
+
 app = Flask(__name__, static_folder="static", template_folder="templates")
-app.secret_key = uuid4().bytes
+app.secret_key = load_secret_key()
 
 # Cookie serializer for secure admin authentication cookies
 cookie_serializer = URLSafeTimedSerializer(app.secret_key)
