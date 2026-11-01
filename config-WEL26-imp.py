@@ -148,7 +148,7 @@ app_data = {
                 "The very first West End Lights happened on a snowy night in 2010, with just nine glowing houses. Now more than 40 houses join in!",
                 "Hold hands with your group and make a wiggly line like a string of lights.",
                 "Count the lights in a twinkly window nearby.",
-                JUNIOR_CREDIT,
+                INFANT_CREDIT,
             ),
             "hint": "Three streets meet here: <b>West Parade</b>, <b>Gresham Street</b> and <b>Hampton Street</b>. Can you find me on the corner?",
             "lat": 53.233926,
